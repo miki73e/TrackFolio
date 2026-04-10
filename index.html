@@ -1,0 +1,1784 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>PL Manager</title>
+  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAABZ0lEQVR4nO2aO2rDQBRFr+1UMaQzeBvZROpsJHXWkFrrCKTOJlKkyg4EWoMghUAISTOa35v7Bt6pVEjyOTNjMcg+PV6f0DJntkAuFsDGAthYABsLYMMPGLpx6Mbky0/crcRW/fZ2iboDM2C2n6WXPYElnIBD0fASQsB24O/fr66Tf/8+5+PdkoeSagFs7f3srq4lVZ9CsfZLXJfUC8ix91BjCSU8W8IRDxAa+BnZJSRtD9GACvaQC6hjD6GAavaQ+BKv7J/fe9eZPx/3/I8rPAM1x36iZEB9exQMoNijVADLHkUCiPbID+DaIzOAbo+cAA32SA5QYo+0AD32SAhQZY/YvdDK3vM2oX/5SpeKIWIGtI39RGiATnsEBqi1R0iAZnscBii3hz9Avz08AU3YwxXQij1cAZO3fnt4llAT9tDwI18mzr2Q9PucUjQ/AxbAxgLYWACb5gPI/1bJp/kZsAA2FsCm+YB/4B+EY37yWokAAAAASUVORK5CYII="/>
+  <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAABZ0lEQVR4nO2aO2rDQBRFr+1UMaQzeBvZROpsJHXWkFrrCKTOJlKkyg4EWoMghUAISTOa35v7Bt6pVEjyOTNjMcg+PV6f0DJntkAuFsDGAthYABsLYMMPGLpx6Mbky0/crcRW/fZ2iboDM2C2n6WXPYElnIBD0fASQsB24O/fr66Tf/8+5+PdkoeSagFs7f3srq4lVZ9CsfZLXJfUC8ix91BjCSU8W8IRDxAa+BnZJSRtD9GACvaQC6hjD6GAavaQ+BKv7J/fe9eZPx/3/I8rPAM1x36iZEB9exQMoNijVADLHkUCiPbID+DaIzOAbo+cAA32SA5QYo+0AD32SAhQZY/YvdDK3vM2oX/5SpeKIWIGtI39RGiATnsEBqi1R0iAZnscBii3hz9Avz08AU3YwxXQij1cAZO3fnt4llAT9tDwI18mzr2Q9PucUjQ/AxbAxgLYWACb5gPI/1bJp/kZsAA2FsCm+YB/4B+EY37yWokAAAAASUVORK5CYII="/>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+const { useState, useMemo, useEffect, useCallback } = React;
+
+
+// ── Supabase ──────────────────────────────────────────────────────────────────
+const SB_URL = "https://csyyrbkbgyjyztkjtbrm.supabase.co";
+const SB_KEY = "sb_publishable_jRMF0ukDp5_IGoYkhjng3g_j5-C0_10";
+const SB_HDR = {"apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json"};
+
+// Map JS object → Supabase transaction row
+// ── Anagrafe helpers ──────────────────────────────────────────────────────────
+function normalizeAssetClass(v) {
+  if (!v) return "";
+  const u = v.toString().toUpperCase().trim();
+  if (u.includes("OBBLIG")) return "Obbligazioni";
+  if (u.includes("AZIONI") || u === "AZIONI") return "Azioni";
+  if (u.includes("COMMODIT")) return "Commodities";
+  if (u.includes("CRYPTO")) return "Crypto";
+  return v;
+}
+function rowToAnagrafe(r) {
+  return {
+    id: r.id,
+    isin: r.isin||"",
+    asset: r.asset||"",
+    assetClass: normalizeAssetClass(r.type),
+    ticker: r.ticker||"",
+  };
+}
+function anagrafeToRow(a) {
+  return {
+    isin: a.isin||null,
+    asset: a.asset||"",
+    type: a.assetClass||"",
+    ticker: a.ticker||null,
+  };
+}
+
+// ── Transaction mapping (transactions_new) ────────────────────────────────────
+// r = Supabase row, anagMap = {id -> anagrafe object}
+function rowToTx(r, anagMap) {
+  // Try by anagrafe_id first, fallback to searching by asset name if missing
+  var anag = anagMap[r.anagrafe_id] || {};
+  if(!anag.asset && r.anagrafe_id) {
+    // anagrafe_id exists but not in map — use empty object
+    anag = {};
+  }
+  const isI = (r.action||"").toUpperCase()==="INCOME";
+  const assetClass = anag.assetClass || "";
+  const isBond = assetClass==="Obbligazioni";
+  const qty = Number(r.qty)||0;
+  const price = Number(r.price)||0;
+  const totale = isI ? price : isBond ? qty*price/100 : qty*price;
+  return {
+    id: r.id,
+    anagrafeId: r.anagrafe_id,
+    date: r.data,
+    type: (r.action||"").toUpperCase(),
+    assetClass,
+    instrument: anag.asset||"",
+    isin: anag.isin||"",
+    ticker: anag.ticker||"",
+    qty, price,
+    tax: Number(r.tax)||0,
+    commission: Number(r.commissioni)||0,
+    totale: Math.round(totale*10000)/10000,
+    amount: isI ? price : null,
+  };
+}
+function txToRow(t) {
+  return {
+    "data": t.date,
+    "action": (t.type||"").toUpperCase(),
+    "anagrafe_id": t.anagrafeId,
+    "qty": t.qty!==undefined&&t.qty!==null ? Number(t.qty) : null,
+    "price": t.price!==undefined&&t.price!==null ? Number(t.price) : null,
+    "tax": t.tax!==undefined&&t.tax!==null ? Number(t.tax) : null,
+    "commissioni": t.commission!==undefined&&t.commission!==null ? Number(t.commission) : null,
+  };
+}
+// Map Supabase snapshot row → JS object
+function rowToSnap(r) {
+  return {id: r.id, date: r.data, value: Number(r.totale_pf)};
+}
+function snapToRow(s) {
+  return {"data": s.date, "totale_pf": Number(s.value)};
+}
+
+async function sbLoad(table) {
+  let r;
+  try {
+    r = await fetch(`${SB_URL}/rest/v1/${table}?select=*&order=id`, {headers: SB_HDR});
+  } catch(netErr) {
+    throw new Error(`Rete: ${netErr.message}`);
+  }
+  if (!r.ok) {
+    let txt = "";
+    try { txt = await r.text(); } catch(e) {}
+    throw new Error(`HTTP ${r.status} su ${table}: ${txt.slice(0,200)}`);
+  }
+  return r.json();
+}
+async function sbInsert(table, row) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
+    method: "POST", headers: {...SB_HDR, "Prefer": "return=representation"},
+    body: JSON.stringify(row)
+  });
+  if (!r.ok) throw new Error(`Insert ${table} failed: ${r.status}`);
+  const rows = await r.json();
+  return rows[0];
+}
+async function sbUpsert(table, row, onConflict="data") {
+  let r;
+  try {
+    r = await fetch(`${SB_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
+      method: "POST",
+      headers: {...SB_HDR, "Prefer": "return=representation,resolution=merge-duplicates"},
+      body: JSON.stringify(row)
+    });
+  } catch(netErr) {
+    throw new Error("Rete: " + netErr.message);
+  }
+  if (!r.ok) {
+    let txt=""; try{txt=await r.text();}catch(e){}
+    throw new Error(`Upsert ${table} HTTP ${r.status}: ${txt.slice(0,200)}`);
+  }
+  const rows = await r.json();
+  return rows[0];
+}
+async function sbUpdate(table, id, row) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`, {
+    method: "PATCH", headers: {...SB_HDR, "Prefer": "return=representation"},
+    body: JSON.stringify(row)
+  });
+  if (!r.ok) throw new Error(`Update ${table} failed: ${r.status}`);
+}
+async function sbDelete(table, id) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`, {
+    method: "DELETE", headers: SB_HDR
+  });
+  if (!r.ok) throw new Error(`Delete ${table} failed: ${r.status}`);
+}
+
+const INITIAL = {"txs": [{"id": 1, "date": "2025-01-01", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP MAR 25 3,40%", "isin": "", "qty": 10000.0, "price": 101.15, "tax": 0, "commission": 0, "totale": 10115.0, "amount": null}, {"id": 2, "date": "2025-03-01", "type": "SELL", "assetClass": "Obbligazioni", "instrument": "BTP MAR 25 3,40%", "isin": "", "qty": 10000.0, "price": 100.0, "tax": 0, "commission": 0, "totale": 10000.0, "amount": null}, {"id": 3, "date": "2025-01-01", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP VAL MAR 30 - 3,25%", "isin": "", "qty": 10000.0, "price": 100.0, "tax": 0, "commission": 0, "totale": 10000.0, "amount": null}, {"id": 4, "date": "2025-01-01", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP AGO 26 0%", "isin": "", "qty": 10000.0, "price": 93.17, "tax": 0, "commission": 0, "totale": 9317.0, "amount": null}, {"id": 5, "date": "2025-01-01", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP VAL MAG 30 - 3,35%", "isin": "", "qty": 10000.0, "price": 100.0, "tax": 0, "commission": 0, "totale": 10000.0, "amount": null}, {"id": 6, "date": "2025-01-01", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BOT AGO 25", "isin": "", "qty": 10000.0, "price": 97.37, "tax": 0, "commission": 0, "totale": 9737.0, "amount": null}, {"id": 7, "date": "2025-01-01", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP SET 25 3,60%", "isin": "", "qty": 20000.0, "price": 100.6, "tax": 0, "commission": 0, "totale": 20120.0, "amount": null}, {"id": 8, "date": "2025-09-29", "type": "SELL", "assetClass": "Obbligazioni", "instrument": "BTP SET 25 3,60%", "isin": "", "qty": 20000.0, "price": 100.0, "tax": 0, "commission": 0, "totale": 20000.0, "amount": null}, {"id": 9, "date": "2025-01-01", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "USB NOV 27 3,875%", "isin": "", "qty": 10000.0, "price": 94.74, "tax": 0, "commission": 0, "totale": 9474.0, "amount": null}, {"id": 10, "date": "2025-02-04", "type": "BUY", "assetClass": "Commodities", "instrument": "AMUNDI PHYSICAL GOLD", "isin": "", "qty": 50.0, "price": 108.52, "tax": 0, "commission": 0, "totale": 5426.0, "amount": null}, {"id": 11, "date": "2025-02-18", "type": "SELL", "assetClass": "Obbligazioni", "instrument": "BOT AGO 25", "isin": "", "qty": 10000.0, "price": 98.83, "tax": 0, "commission": 0, "totale": 9883.0, "amount": null}, {"id": 12, "date": "2025-02-28", "type": "BUY", "assetClass": "Commodities", "instrument": "AMUNDI PHYSICAL GOLD", "isin": "", "qty": 40.0, "price": 109.04, "tax": 0, "commission": 0, "totale": 4361.6, "amount": null}, {"id": 13, "date": "2025-04-15", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "MEDIOBANCA MAR 26 3,25%", "isin": "", "qty": 5000.0, "price": 100.55, "tax": 0, "commission": 0, "totale": 5027.5, "amount": null}, {"id": 14, "date": "2025-02-04", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "MEDIOBANCA MAR 26 3,25%", "isin": "", "qty": 5000.0, "price": 100.49, "tax": 0, "commission": 0, "totale": 5024.5, "amount": null}, {"id": 15, "date": "2026-03-01", "type": "SELL", "assetClass": "Obbligazioni", "instrument": "MEDIOBANCA MAR 26 3,25%", "isin": "", "qty": 10000.0, "price": 100.0, "tax": 0, "commission": 0, "totale": 10000.0, "amount": null}, {"id": 16, "date": "2025-04-28", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP OTT 29 3%", "isin": "", "qty": 10000.0, "price": 102.15, "tax": 0, "commission": 0, "totale": 10215.0, "amount": null}, {"id": 17, "date": "2025-04-30", "type": "BUY", "assetClass": "Azioni", "instrument": "TELECOM ITA ORD", "isin": "", "qty": 10000.0, "price": 0.348, "tax": 0, "commission": 0, "totale": 3480.0, "amount": null}, {"id": 18, "date": "2025-05-28", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP ITA GIU 32 - 1,85% LKD", "isin": "", "qty": 10000.0, "price": 100.0, "tax": 0, "commission": 0, "totale": 10000.0, "amount": null}, {"id": 19, "date": "2025-06-10", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "USB NOV 27 3,875%", "isin": "", "qty": 10000.0, "price": 87.58, "tax": 0, "commission": 0, "totale": 8758.0, "amount": null}, {"id": 20, "date": "2025-06-12", "type": "BUY", "assetClass": "Azioni", "instrument": "AMUNDI MSCI WORLD", "isin": "", "qty": 10.0, "price": 339.15, "tax": 0, "commission": 0, "totale": 3391.5, "amount": null}, {"id": 21, "date": "2025-06-12", "type": "BUY", "assetClass": "Azioni", "instrument": "AMUNDI MSCI EU", "isin": "", "qty": 20.0, "price": 102.43, "tax": 0, "commission": 0, "totale": 2048.6, "amount": null}, {"id": 22, "date": "2025-06-13", "type": "BUY", "assetClass": "Commodities", "instrument": "CRUDE OIL", "isin": "", "qty": 500.0, "price": 8.82, "tax": 0, "commission": 0, "totale": 4410.0, "amount": null}, {"id": 23, "date": "2025-06-27", "type": "SELL", "assetClass": "Commodities", "instrument": "CRUDE OIL", "isin": "", "qty": 500.0, "price": 7.94, "tax": 0, "commission": 0, "totale": 3970.0, "amount": null}, {"id": 24, "date": "2025-07-02", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP MAR 37 0,95%", "isin": "", "qty": 10000.0, "price": 75.32, "tax": 0, "commission": 0, "totale": 7532.0, "amount": null}, {"id": 25, "date": "2025-07-25", "type": "BUY", "assetClass": "Azioni", "instrument": "AMUNDI MSCI EU", "isin": "", "qty": 25.0, "price": 103.27, "tax": 0, "commission": 0, "totale": 2581.75, "amount": null}, {"id": 26, "date": "2025-07-25", "type": "BUY", "assetClass": "Azioni", "instrument": "AMUNDI MSCI WORLD", "isin": "", "qty": 5.0, "price": 351.7, "tax": 0, "commission": 0, "totale": 1758.5, "amount": null}, {"id": 27, "date": "2025-07-28", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP GEN 29 2,35%", "isin": "", "qty": 10000.0, "price": 99.78, "tax": 0, "commission": 0, "totale": 9978.0, "amount": null}, {"id": 28, "date": "2025-07-29", "type": "SELL", "assetClass": "Azioni", "instrument": "TELECOM ITA ORD", "isin": "", "qty": 10000.0, "price": 0.403, "tax": 41.54, "commission": 0, "totale": 4030.0, "amount": null}, {"id": 29, "date": "2025-10-14", "type": "BUY", "assetClass": "Azioni", "instrument": "WISDOMTREE EU DEFENSE", "isin": "", "qty": 100.0, "price": 32.71, "tax": 0, "commission": 0, "totale": 3271.0, "amount": null}, {"id": 30, "date": "2025-10-17", "type": "SELL", "assetClass": "Azioni", "instrument": "WISDOMTREE EU DEFENSE", "isin": "", "qty": 100.0, "price": 31.15, "tax": 0, "commission": 0, "totale": 3115.0, "amount": null}, {"id": 31, "date": "2025-10-20", "type": "BUY", "assetClass": "Azioni", "instrument": "AMUNDI MSCI WORLD", "isin": "", "qty": 10.0, "price": 363.38, "tax": 0, "commission": 0, "totale": 3633.8, "amount": null}, {"id": 32, "date": "2025-10-21", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP VAL OTT 32 - 2,6%", "isin": "", "qty": 20000.0, "price": 100.0, "tax": 0, "commission": 0, "totale": 20000.0, "amount": null}, {"id": 33, "date": "2026-01-13", "type": "BUY", "assetClass": "Azioni", "instrument": "AMUNDI MSCI WORLD", "isin": "", "qty": 5.0, "price": 383.07, "tax": 0, "commission": 0, "totale": 1915.35, "amount": null}, {"id": 34, "date": "2026-01-13", "type": "BUY", "assetClass": "Azioni", "instrument": "XTRACKERS MSCI EX US", "isin": "", "qty": 275.0, "price": 36.34, "tax": 0, "commission": 0, "totale": 9993.5, "amount": null}, {"id": 35, "date": "2026-01-13", "type": "SELL", "assetClass": "Azioni", "instrument": "AMUNDI MSCI EU", "isin": "", "qty": 45.0, "price": 114.33, "tax": 138.45, "commission": 0, "totale": 5144.85, "amount": null}, {"id": 36, "date": "2026-02-02", "type": "SELL", "assetClass": "Commodities", "instrument": "AMUNDI PHYSICAL GOLD", "isin": "", "qty": 20.0, "price": 169.12, "tax": 536.0, "commission": 0, "totale": 3382.4, "amount": null}, {"id": 37, "date": "2026-02-02", "type": "SELL", "assetClass": "Commodities", "instrument": "AMUNDI PHYSICAL GOLD", "isin": "", "qty": 20.0, "price": 164.39, "tax": 0, "commission": 0, "totale": 3287.8, "amount": null}, {"id": 38, "date": "2026-02-10", "type": "BUY", "assetClass": "Commodities", "instrument": "AMUNDI PHYSICAL GOLD", "isin": "", "qty": 15.0, "price": 167.06, "tax": 0, "commission": 0, "totale": 2505.9, "amount": null}, {"id": 39, "date": "2026-02-11", "type": "BUY", "assetClass": "Crypto", "instrument": "ISHARES BITCOIN", "isin": "", "qty": 500.0, "price": 5.87, "tax": 0, "commission": 0, "totale": 2935.0, "amount": null}, {"id": 40, "date": "2026-03-03", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP VAL MAR 32 - 2,60%", "isin": "", "qty": 10000.0, "price": 100.0, "tax": 0, "commission": 0, "totale": 10000.0, "amount": null}, {"id": 41, "date": "2026-02-17", "type": "BUY", "assetClass": "Azioni", "instrument": "DB X-T MSCI ENERGY", "isin": "", "qty": 80.0, "price": 61.95, "tax": 0, "commission": 0, "totale": 4956.0, "amount": null}, {"id": 42, "date": "2025-01-01", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP FEB 25 - 0,35%", "isin": "", "qty": 20000.0, "price": 96.72, "tax": 0, "commission": 0, "totale": 19344.0, "amount": null}, {"id": 43, "date": "2025-02-28", "type": "SELL", "assetClass": "Obbligazioni", "instrument": "BTP FEB 25 - 0,35%", "isin": "", "qty": 20000.0, "price": 100.0, "tax": 0, "commission": 0, "totale": 20000.0, "amount": null}, {"id": 44, "date": "2025-01-01", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP LUG 25 1,85%", "isin": "", "qty": 20000.0, "price": 99.59, "tax": 0, "commission": 0, "totale": 19918.0, "amount": null}, {"id": 45, "date": "2025-07-01", "type": "SELL", "assetClass": "Obbligazioni", "instrument": "BTP LUG 25 1,85%", "isin": "", "qty": 20000.0, "price": 100.0, "tax": 0, "commission": 0, "totale": 20000.0, "amount": null}, {"id": 46, "date": "2025-01-01", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP APR 26 0%", "isin": "", "qty": 20000.0, "price": 93.22, "tax": 0, "commission": 0, "totale": 18644.0, "amount": null}, {"id": 47, "date": "2025-01-01", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP DIC 26 1,25%", "isin": "", "qty": 10000.0, "price": 99.63, "tax": 0, "commission": 0, "totale": 9963.0, "amount": null}, {"id": 48, "date": "2025-01-01", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP GIU 27 - 4%", "isin": "", "qty": 10000.0, "price": 100.0, "tax": 0, "commission": 0, "totale": 10000.0, "amount": null}, {"id": 49, "date": "2025-01-01", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP OTT 28 - 4,10%", "isin": "", "qty": 10000.0, "price": 100.0, "tax": 0, "commission": 0, "totale": 10000.0, "amount": null}, {"id": 50, "date": "2025-01-01", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP NOV 28 - 1,6% LKD", "isin": "", "qty": 10000.0, "price": 100.0, "tax": 0, "commission": 0, "totale": 10000.0, "amount": null}, {"id": 51, "date": "2025-01-01", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BONOS MAG 25 0%", "isin": "", "qty": 25000.0, "price": 98.92, "tax": 0, "commission": 0, "totale": 24730.0, "amount": null}, {"id": 52, "date": "2025-05-27", "type": "SELL", "assetClass": "Obbligazioni", "instrument": "BONOS MAG 25 0%", "isin": "", "qty": 25000.0, "price": 100.0, "tax": 0, "commission": 0, "totale": 25000.0, "amount": null}, {"id": 53, "date": "2025-01-01", "type": "BUY", "assetClass": "Azioni", "instrument": "AMUNDI FTSE MIB", "isin": "", "qty": 100.0, "price": 34.45, "tax": 0, "commission": 0, "totale": 3445.0, "amount": null}, {"id": 54, "date": "2025-01-31", "type": "SELL", "assetClass": "Azioni", "instrument": "AMUNDI FTSE MIB", "isin": "", "qty": 100.0, "price": 36.97, "tax": 84.69, "commission": 0, "totale": 3697.0, "amount": null}, {"id": 55, "date": "2025-02-25", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP PIU FEB 33 - 2,85%", "isin": "", "qty": 10000.0, "price": 100.0, "tax": 0, "commission": 0, "totale": 10000.0, "amount": null}, {"id": 56, "date": "2025-01-01", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP MAR 37 0,95%", "isin": "", "qty": 10000.0, "price": 96.45, "tax": 0, "commission": 0, "totale": 9645.0, "amount": null}, {"id": 57, "date": "2025-01-01", "type": "BUY", "assetClass": "Azioni", "instrument": "AMUNDI", "isin": "", "qty": 100.0, "price": 42.74, "tax": 0, "commission": 0, "totale": 4274.0, "amount": null}, {"id": 58, "date": "2025-02-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP FEB 25 - 0,35%", "isin": "", "qty": 0, "price": 35.42857142857143, "tax": 4.428571428571429, "commission": 0, "totale": 35.4286, "amount": 35.42857142857143}, {"id": 59, "date": "2025-03-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP MAR 25 3,40%", "isin": "", "qty": 0, "price": 170.28571428571428, "tax": 21.285714285714285, "commission": 0, "totale": 170.2857, "amount": 170.28571428571428}, {"id": 60, "date": "2025-01-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP LUG 25 1,85%", "isin": "", "qty": 0, "price": 185.14285714285714, "tax": 23.142857142857142, "commission": 0, "totale": 185.1429, "amount": 185.14285714285714}, {"id": 61, "date": "2025-07-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP LUG 25 1,85%", "isin": "", "qty": 0, "price": 185.14285714285714, "tax": 23.142857142857142, "commission": 0, "totale": 185.1429, "amount": 185.14285714285714}, {"id": 62, "date": "2025-09-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP SET 25 3,60%", "isin": "", "qty": 0, "price": 360.0, "tax": 45.0, "commission": 0, "totale": 360.0, "amount": 360.0}, {"id": 63, "date": "2025-03-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP SET 25 3,60%", "isin": "", "qty": 0, "price": 360.0, "tax": 45.0, "commission": 0, "totale": 360.0, "amount": 360.0}, {"id": 64, "date": "2025-06-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP DIC 26 1,25%", "isin": "", "qty": 0, "price": 63.0, "tax": 7.875, "commission": 0, "totale": 63.0, "amount": 63.0}, {"id": 65, "date": "2025-12-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP DIC 26 1,25%", "isin": "", "qty": 0, "price": 63.0, "tax": 7.875, "commission": 0, "totale": 63.0, "amount": 63.0}, {"id": 66, "date": "2025-06-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP GIU 27 - 4%", "isin": "", "qty": 0, "price": 200.0, "tax": 25.0, "commission": 0, "totale": 200.0, "amount": 200.0}, {"id": 67, "date": "2025-12-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP GIU 27 - 4%", "isin": "", "qty": 0, "price": 200.0, "tax": 25.0, "commission": 0, "totale": 200.0, "amount": 200.0}, {"id": 68, "date": "2025-06-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "USB NOV 27 3,875%", "isin": "", "qty": 0, "price": 149.0, "tax": 18.625, "commission": 0, "totale": 149.0, "amount": 149.0}, {"id": 69, "date": "2025-12-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "USB NOV 27 3,875%", "isin": "", "qty": 0, "price": 290.0, "tax": 36.25, "commission": 0, "totale": 290.0, "amount": 290.0}, {"id": 70, "date": "2025-06-01", "type": "INCOME", "assetClass": "Azioni", "instrument": "AMUNDI", "isin": "", "qty": 0, "price": 370.0, "tax": 53.0, "commission": 0, "totale": 370.0, "amount": 370.0}, {"id": 71, "date": "2025-01-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP OTT 28 - 4,10%", "isin": "", "qty": 0, "price": 103.0, "tax": 12.875, "commission": 0, "totale": 103.0, "amount": 103.0}, {"id": 72, "date": "2025-04-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP OTT 28 - 4,10%", "isin": "", "qty": 0, "price": 103.0, "tax": 12.875, "commission": 0, "totale": 103.0, "amount": 103.0}, {"id": 73, "date": "2025-07-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP OTT 28 - 4,10%", "isin": "", "qty": 0, "price": 103.0, "tax": 12.875, "commission": 0, "totale": 103.0, "amount": 103.0}, {"id": 74, "date": "2025-10-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP OTT 28 - 4,10%", "isin": "", "qty": 0, "price": 103.0, "tax": 12.875, "commission": 0, "totale": 103.0, "amount": 103.0}, {"id": 75, "date": "2025-05-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP NOV 28 - 1,6% LKD", "isin": "", "qty": 0, "price": 187.42857142857142, "tax": 23.428571428571427, "commission": 0, "totale": 187.4286, "amount": 187.42857142857142}, {"id": 76, "date": "2025-11-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP NOV 28 - 1,6% LKD", "isin": "", "qty": 0, "price": 115.42857142857143, "tax": 14.428571428571429, "commission": 0, "totale": 115.4286, "amount": 115.42857142857143}, {"id": 77, "date": "2025-03-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP VAL MAR 30 - 3,25%", "isin": "", "qty": 0, "price": 81.0, "tax": 10.125, "commission": 0, "totale": 81.0, "amount": 81.0}, {"id": 78, "date": "2025-06-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP VAL MAR 30 - 3,25%", "isin": "", "qty": 0, "price": 81.0, "tax": 10.125, "commission": 0, "totale": 81.0, "amount": 81.0}, {"id": 79, "date": "2025-09-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP VAL MAR 30 - 3,25%", "isin": "", "qty": 0, "price": 81.0, "tax": 10.125, "commission": 0, "totale": 81.0, "amount": 81.0}, {"id": 80, "date": "2025-12-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP VAL MAR 30 - 3,25%", "isin": "", "qty": 0, "price": 81.0, "tax": 10.125, "commission": 0, "totale": 81.0, "amount": 81.0}, {"id": 81, "date": "2026-03-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP VAL MAR 30 - 3,25%", "isin": "", "qty": 0, "price": 81.0, "tax": 10.125, "commission": 0, "totale": 81.0, "amount": 81.0}, {"id": 82, "date": "2025-02-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP VAL MAG 30 - 3,35%", "isin": "", "qty": 0, "price": 84.0, "tax": 10.5, "commission": 0, "totale": 84.0, "amount": 84.0}, {"id": 83, "date": "2025-05-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP VAL MAG 30 - 3,35%", "isin": "", "qty": 0, "price": 84.0, "tax": 10.5, "commission": 0, "totale": 84.0, "amount": 84.0}, {"id": 84, "date": "2025-08-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP VAL MAG 30 - 3,35%", "isin": "", "qty": 0, "price": 84.0, "tax": 10.5, "commission": 0, "totale": 84.0, "amount": 84.0}, {"id": 85, "date": "2025-11-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP VAL MAG 30 - 3,35%", "isin": "", "qty": 0, "price": 84.0, "tax": 10.5, "commission": 0, "totale": 84.0, "amount": 84.0}, {"id": 86, "date": "2026-02-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP VAL MAG 30 - 3,35%", "isin": "", "qty": 0, "price": 84.0, "tax": 10.5, "commission": 0, "totale": 84.0, "amount": 84.0}, {"id": 87, "date": "2025-03-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP MAR 37 0,95%", "isin": "", "qty": 0, "price": 95.0, "tax": 11.875, "commission": 0, "totale": 95.0, "amount": 95.0}, {"id": 88, "date": "2025-09-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP MAR 37 0,95%", "isin": "", "qty": 0, "price": 95.0, "tax": 11.875, "commission": 0, "totale": 95.0, "amount": 95.0}, {"id": 89, "date": "2026-03-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP MAR 37 0,95%", "isin": "", "qty": 0, "price": 95.0, "tax": 11.875, "commission": 0, "totale": 95.0, "amount": 95.0}, {"id": 90, "date": "2025-04-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP OTT 29 3%", "isin": "", "qty": 0, "price": 150.0, "tax": 18.75, "commission": 0, "totale": 150.0, "amount": 150.0}, {"id": 91, "date": "2025-10-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP OTT 29 3%", "isin": "", "qty": 0, "price": 300.0, "tax": 37.5, "commission": 0, "totale": 300.0, "amount": 300.0}, {"id": 92, "date": "2026-03-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "MEDIOBANCA MAR 26 3,25%", "isin": "", "qty": 0, "price": 325.0, "tax": 84.5, "commission": 0, "totale": 325.0, "amount": 325.0}, {"id": 93, "date": "2025-03-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "MEDIOBANCA MAR 26 3,25%", "isin": "", "qty": 0, "price": 162.5, "tax": 42.25, "commission": 0, "totale": 162.5, "amount": 162.5}, {"id": 94, "date": "2025-05-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP PIU FEB 33 - 2,85%", "isin": "", "qty": 0, "price": 71.0, "tax": 8.875, "commission": 0, "totale": 71.0, "amount": 71.0}, {"id": 95, "date": "2025-08-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP PIU FEB 33 - 2,85%", "isin": "", "qty": 0, "price": 71.0, "tax": 8.875, "commission": 0, "totale": 71.0, "amount": 71.0}, {"id": 96, "date": "2025-11-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP PIU FEB 33 - 2,85%", "isin": "", "qty": 0, "price": 71.0, "tax": 8.875, "commission": 0, "totale": 71.0, "amount": 71.0}, {"id": 97, "date": "2026-02-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP PIU FEB 33 - 2,85%", "isin": "", "qty": 0, "price": 71.0, "tax": 8.875, "commission": 0, "totale": 71.0, "amount": 71.0}, {"id": 98, "date": "2025-12-01", "type": "INCOME", "assetClass": "Azioni", "instrument": "AMUNDI MSCI WORLD", "isin": "", "qty": 0, "price": 118.91891891891892, "tax": 14.864864864864865, "commission": 0, "totale": 118.9189, "amount": 118.91891891891892}, {"id": 99, "date": "2025-12-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP ITA GIU 32 - 1,85% LKD", "isin": "", "qty": 0, "price": 115.42857142857143, "tax": 14.428571428571429, "commission": 0, "totale": 115.4286, "amount": 115.42857142857143}, {"id": 100, "date": "2026-01-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP VAL OTT 32 - 2,6%", "isin": "", "qty": 0, "price": 130.0, "tax": 16.25, "commission": 0, "totale": 130.0, "amount": 130.0}, {"id": 101, "date": "2026-01-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP OTT 28 - 4,10%", "isin": "", "qty": 0, "price": 103.0, "tax": 16.25, "commission": 0, "totale": 103.0, "amount": 103.0}, {"id": 102, "date": "2026-01-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP GEN 29 2,35%", "isin": "", "qty": 0, "price": 118.0, "tax": 16.25, "commission": 0, "totale": 118.0, "amount": 118.0}, {"id": 103, "date": "2025-09-01", "type": "BUY", "assetClass": "Azioni", "instrument": "AMUNDI MSCI EM", "isin": "", "qty": 1000.0, "price": 5.54, "tax": 0, "commission": 0, "totale": 5540.0, "amount": null}, {"id": 104, "date": "2026-04-01", "type": "SELL", "assetClass": "Obbligazioni", "instrument": "BTP APR 26 0%", "isin": "", "qty": 20000.0, "price": 99.93, "tax": 142.0, "commission": 0, "totale": 19986.0, "amount": null}, {"id": 105, "date": "2026-04-01", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP OTT 29 3%", "isin": "", "qty": 0, "price": 300.0, "tax": 37.5, "commission": 0, "totale": 300.0, "amount": 300.0}, {"id": 106, "date": "2025-07-02", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP MAR 37 0,95%", "isin": "", "qty": 0, "price": -73.14285714285714, "tax": -9.142857142857142, "commission": 0, "totale": -73.1429, "amount": -73.14285714285714}, {"id": 107, "date": "2025-02-04", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "MEDIOBANCA MAR 26 3,25%", "isin": "", "qty": 0, "price": -128.0, "tax": -16.0, "commission": 0, "totale": -128.0, "amount": -128.0}, {"id": 108, "date": "2025-04-15", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "MEDIOBANCA MAR 26 3,25%", "isin": "", "qty": 0, "price": -18.285714285714285, "tax": -2.2857142857142856, "commission": 0, "totale": -18.2857, "amount": -18.285714285714285}, {"id": 109, "date": "2025-06-10", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "USB NOV 27 3,875%", "isin": "", "qty": 0, "price": -49.142857142857146, "tax": -6.142857142857143, "commission": 0, "totale": -49.1429, "amount": -49.142857142857146}, {"id": 110, "date": "2025-02-04", "type": "BUY", "assetClass": "Obbligazioni", "instrument": "BTP OTT 29 3%", "isin": "", "qty": 10000.0, "price": 101.0, "tax": 0, "commission": 0, "totale": 10100.0, "amount": null}, {"id": 111, "date": "2025-02-04", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP OTT 29 3%", "isin": "", "qty": 0, "price": -102.85714285714286, "tax": -12.857142857142858, "commission": 0, "totale": -102.8571, "amount": -102.85714285714286}, {"id": 112, "date": "2025-04-28", "type": "INCOME", "assetClass": "Obbligazioni", "instrument": "BTP OTT 29 3%", "isin": "", "qty": 0, "price": -22.857142857142858, "tax": -2.857142857142857, "commission": 0, "totale": -22.8571, "amount": -22.857142857142858}], "snaps": [{"id": 1000, "date": "2025-01-01", "value": 221480.0}, {"id": 1001, "date": "2025-01-31", "value": 218048.0}, {"id": 1002, "date": "2025-02-28", "value": 224199.0}, {"id": 1003, "date": "2025-03-31", "value": 214676.0}, {"id": 1004, "date": "2025-04-30", "value": 233568.0}, {"id": 1005, "date": "2025-05-31", "value": 219905.0}, {"id": 1006, "date": "2025-06-30", "value": 236978.0}, {"id": 1007, "date": "2025-07-31", "value": 230980.0}, {"id": 1008, "date": "2025-08-31", "value": 230500.0}, {"id": 1009, "date": "2025-09-30", "value": 218010.0}, {"id": 1010, "date": "2025-10-31", "value": 243898.0}, {"id": 1011, "date": "2025-11-30", "value": 244983.0}, {"id": 1012, "date": "2025-12-31", "value": 244800.0}, {"id": 1013, "date": "2026-01-01", "value": 244800.0}, {"id": 1014, "date": "2026-01-31", "value": 254780.0}, {"id": 1015, "date": "2026-02-28", "value": 261381.0}, {"id": 1016, "date": "2026-03-31", "value": 255080.0}, {"id": 1017, "date": "2026-04-02", "value": 236000.0}]};
+
+const css = `
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0b0e;--s1:#12141a;--s2:#1a1d26;--b:#22273a;
+  --g:#22c55e;--r:#ef4444;--bl:#3b82f6;--y:#f59e0b;
+  --t:#f1f5f9;--m:#64748b;--m2:#94a3b8;
+  --mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;
+}
+body{background:var(--bg);color:var(--t);font-family:var(--sans);min-height:100vh;font-size:14px}
+.nav{display:flex;background:var(--s1);border-bottom:1px solid var(--b);overflow-x:auto;scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.nb{flex:1;min-width:78px;padding:13px 6px;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;border:none;background:none;color:var(--m);border-bottom:2px solid transparent;white-space:nowrap;transition:all .15s}
+.nb.on{color:var(--bl);border-bottom-color:var(--bl)}
+.nb:hover:not(.on){color:var(--t)}
+.pbar{display:flex;gap:5px;padding:9px 14px;background:var(--s1);border-bottom:1px solid var(--b);overflow-x:auto;scrollbar-width:none;align-items:center}
+.pbar::-webkit-scrollbar{display:none}
+.pb{font-family:var(--mono);font-size:10px;padding:4px 11px;border-radius:4px;border:1px solid var(--b);background:none;color:var(--m);cursor:pointer;transition:all .15s;white-space:nowrap}
+.pb.on{background:var(--bl);color:#fff;border-color:var(--bl);font-weight:700}
+.pb:hover:not(.on){color:var(--t)}
+.main{padding:13px;max-width:860px;margin:0 auto}
+.k2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.k4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:13px}
+@media(max-width:440px){.k4{grid-template-columns:repeat(2,1fr)}}
+.card{background:var(--s1);border:1px solid var(--b);border-radius:10px;padding:13px 15px;overflow:hidden}
+.card.g{border-color:var(--g)}.card.r{border-color:var(--r)}
+.cl{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--m);margin-bottom:7px}
+.cv{font-family:var(--mono);font-weight:700;line-height:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cv.lg{font-size:21px}.cv.md{font-size:15px}
+.green{color:var(--g)}.red{color:var(--r)}.blue{color:var(--bl)}.neu{color:var(--t)}.mu{color:var(--m)}
+.panel{background:var(--s1);border:1px solid var(--b);border-radius:10px;padding:13px 15px;margin-bottom:11px}
+.pt{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--m2);margin-bottom:11px;display:flex;align-items:center;gap:8px;justify-content:space-between}
+.tbl{background:var(--s1);border:1px solid var(--b);border-radius:10px;overflow:auto;max-height:65vh}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th{background:var(--bg);color:var(--m);font-size:9px;text-transform:uppercase;letter-spacing:.07em;font-weight:600;padding:7px 11px;text-align:right;border-bottom:1px solid var(--b);white-space:nowrap;position:sticky;top:0;z-index:2}
+th:first-child{text-align:left;position:sticky;left:0;top:0;z-index:3;background:var(--bg)}
+td{padding:7px 11px;border-bottom:1px solid var(--b);font-family:var(--mono);font-size:11px;text-align:right;white-space:nowrap;vertical-align:middle}
+td:first-child{text-align:left;font-family:var(--sans);font-size:11px;font-weight:500;position:sticky;left:0;background:var(--s1);z-index:1}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#181b26}
+tr:hover td:first-child{background:#1a1d28}
+.bdg{display:inline-block;padding:2px 6px;border-radius:3px;font-size:9px;font-weight:700;font-family:var(--mono)}
+.bb{background:rgba(59,130,246,.15);color:var(--bl)}.bs{background:rgba(239,68,68,.15);color:var(--r)}.bi{background:rgba(34,197,94,.15);color:var(--g)}
+.hm{display:grid;grid-template-columns:repeat(6,1fr);gap:5px}
+@media(max-width:400px){.hm{grid-template-columns:repeat(3,1fr)}}
+.hc{border-radius:7px;padding:8px 4px;text-align:center}
+.hcl{font-size:9px;color:var(--m);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em}
+.hcv{font-family:var(--mono);font-size:11px;font-weight:700}
+.fg{display:flex;flex-direction:column;gap:4px;flex:1;min-width:105px}
+.fg label{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--m)}
+.fg input,.fg select{background:var(--bg);border:1px solid var(--b);border-radius:5px;padding:7px 9px;color:var(--t);font-size:11px;font-family:var(--mono);outline:none}
+.fg input:focus,.fg select:focus{border-color:var(--bl)}
+.fg select option{background:#0f1117}
+.fg input.err,.fg select.err{border-color:var(--r)}
+.em{font-size:9px;color:var(--r);margin-top:1px}
+.btn{padding:7px 14px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;border:none;font-family:var(--sans);transition:all .15s}
+.bp{background:var(--bl);color:#fff}.bp:hover{filter:brightness(1.1)}
+.bg_{background:none;color:var(--m);border:1px solid var(--b)}.bg_:hover{color:var(--t)}
+.bx{background:rgba(245,158,11,.1);color:var(--y);border:1px solid rgba(245,158,11,.3)}.bx:hover{filter:brightness(1.1)}
+.ic{background:none;border:none;cursor:pointer;padding:3px 6px;border-radius:4px;font-size:12px;color:var(--m);transition:all .15s}
+.ic:hover{background:rgba(255,255,255,.06);color:var(--t)}
+.ic.del:hover{color:var(--r);background:rgba(239,68,68,.1)}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;z-index:300;padding:14px}
+.modal{background:var(--s1);border:1px solid var(--b);border-radius:12px;padding:22px;width:100%;max-width:580px;max-height:92vh;overflow-y:auto}
+.mhdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.mtitle{font-size:13px;font-weight:600}
+.mx{background:none;border:none;color:var(--m);font-size:17px;cursor:pointer}
+.fg2{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:9px;margin-bottom:13px}
+.frow{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+.empty{text-align:center;padding:34px;color:var(--m);font-size:11px}
+.fltr{display:flex;gap:5px;margin-bottom:11px;flex-wrap:wrap;align-items:center}
+.ftag{font-size:10px;padding:3px 9px;border-radius:4px;border:1px solid var(--b);background:none;color:var(--m);cursor:pointer;font-family:var(--mono)}
+.ftag.on{background:var(--bl);color:#fff;border-color:var(--bl)}
+.totbox{background:var(--bg);border:1px solid var(--b);border-radius:7px;padding:9px 13px;margin-bottom:13px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-thumb{background:var(--b);border-radius:2px}
+`;
+
+const MN = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
+const AC_LIST = ["Obbligazioni","Azioni","Commodities","Crypto","Altro"];
+const AC_COL  = {"Obbligazioni":"#3b82f6","Azioni":"#22c55e","Commodities":"#f59e0b","Crypto":"#a78bfa","Altro":"#fb923c"};
+const acColor = cls => AC_COL[cls] || "#64748b";
+const today = () => new Date().toISOString().slice(0,10);
+
+const fN = (n, d=0) => {
+  if (n==null||isNaN(n)) return "—";
+  const abs = Math.abs(n).toFixed(d);
+  const [int, dec] = abs.split(".");
+  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  const formatted = dec !== undefined && d > 0 ? grouped + "," + dec : grouped;
+  return (n < 0 ? "-" : "") + formatted;
+};
+const fP = (n, d=1) => n==null||isNaN(n) ? "—" : fN(n,d) + "%";
+const sgn = n => n==null||isNaN(n) ? "neu" : n > 0 ? "green" : n < 0 ? "red" : "neu";
+const heatCol = p => {
+  if (p==null) return "var(--s2)";
+  const t = Math.max(-1, Math.min(1, p/5));
+  return t >= 0 ? `rgba(34,197,94,${0.08+t*0.4})` : `rgba(239,68,68,${0.08+Math.abs(t)*0.4})`;
+};
+
+// ── Engine ────────────────────────────────────────────────────────────────────
+function wavgAt(txs, date) {
+  const pos = {};
+  const filtered = [...txs].filter(t => t.type !== "INCOME" && t.date <= date)
+    .sort((a,b) => a.date.localeCompare(b.date));
+  for (const tx of filtered) {
+    const k = tx.instrument;
+    if (!pos[k]) pos[k] = {qty:0, cost:0, assetClass:tx.assetClass, instrument:tx.instrument, isin:tx.isin||""};
+    if (tx.type === "BUY") {
+      pos[k].qty += tx.qty;
+      pos[k].cost += tx.totale + (tx.commission||0);
+    } else if (tx.type === "SELL" && pos[k].qty > 0) {
+      const avg = pos[k].cost / pos[k].qty;
+      pos[k].cost -= avg * tx.qty;
+      pos[k].qty = Math.max(0, pos[k].qty - tx.qty);
+      if (pos[k].qty === 0) pos[k].cost = 0;
+    }
+  }
+  return pos;
+}
+function investitoAt(txs, date) {
+  return Object.values(wavgAt(txs, date)).reduce((s,p) => s + (p.qty>0 ? p.cost : 0), 0);
+}
+function snapAt(snaps, date) {
+  const s = [...snaps].sort((a,b) => a.date.localeCompare(b.date)).filter(x => x.date <= date);
+  return s.length ? s[s.length-1].value : null;
+}
+// Last snap date at or before date
+function lastSnapDate(snaps, date) {
+  const s = [...snaps].sort((a,b) => a.date.localeCompare(b.date)).filter(x => x.date <= date);
+  return s.length ? s[s.length-1].date : null;
+}
+function mediaPesata(txs, from, to) {
+  const eventDates = [...new Set(
+    [from, ...txs.filter(t => t.type!=="INCOME" && t.date>=from && t.date<=to).map(t=>t.date), to]
+  )].sort();
+  let totW = 0, totD = 0;
+  for (let i = 0; i < eventDates.length-1; i++) {
+    const d0 = eventDates[i], d1 = eventDates[i+1];
+    const days = (new Date(d1) - new Date(d0)) / 86400000;
+    if (days <= 0) continue;
+    totW += investitoAt(txs, d0) * days;
+    totD += days;
+  }
+  totW += investitoAt(txs, to);
+  totD += 1;
+  return totD > 0 ? totW / totD : 0;
+}
+function plOpenYear(txs, snaps, year) {
+  const jan1 = `${year}-01-01`, dec31 = `${year}-12-31`;
+  const snapEnd = snapAt(snaps, dec31);
+  if (snapEnd == null) return null;
+  const snapJan = snapAt(snaps, jan1) || 0;
+  return (snapEnd - investitoAt(txs, dec31)) - (snapJan - investitoAt(txs, jan1));
+}
+function plCloseRange(txs, from, to) {
+  let total = 0;
+  const sells = [...txs].filter(t => t.type==="SELL" && t.date>from && t.date<=to)
+    .sort((a,b) => a.date.localeCompare(b.date));
+  for (const sell of sells) {
+    const posBefore = wavgAt(txs.filter(t => t.date < sell.date), sell.date);
+    const p = posBefore[sell.instrument];
+    const pmc = p && p.qty > 0 ? p.cost / p.qty : 0;
+    total += sell.totale - pmc * sell.qty - (sell.commission||0);
+  }
+  return total;
+}
+function sellsInRange(txs, from, to) {
+  const result = [];
+  const sells = [...txs].filter(t => t.type==="SELL" && t.date>from && t.date<=to)
+    .sort((a,b) => a.date.localeCompare(b.date));
+  for (const sell of sells) {
+    const posBefore = wavgAt(txs.filter(t => t.date < sell.date), sell.date);
+    const p = posBefore[sell.instrument];
+    const pmc = p && p.qty > 0 ? p.cost / p.qty : 0;
+    const pl = sell.totale - pmc * sell.qty; // P/L before costs
+    const fees = sell.commission||0;
+    const tax = sell.tax||0;
+    const net = pl - tax - fees;
+    const costBuy = pmc * sell.qty;
+    const pct = costBuy > 0 ? (net / costBuy) * 100 : null;
+    result.push({...sell, pmc, pl, fees, net, pct});
+  }
+  return result;
+}
+function yearMetrics(txs, snaps, year) {
+  const yr = String(year), jan1 = `${yr}-01-01`, dec31 = `${yr}-12-31`;
+  const lastSnap = snapAt(snaps, dec31);
+  if (lastSnap == null) return null;
+  const plOpen = plOpenYear(txs, snaps, year);
+  const plClose = plCloseRange(txs, `${year-1}-12-31`, dec31);
+  const cedole = txs.filter(t => t.type==="INCOME" && t.date>=jan1 && t.date<=dec31)
+    .reduce((s,t) => s+(t.amount||0), 0);
+  const tax = txs.filter(t => t.date>=jan1 && t.date<=dec31)
+    .reduce((s,t) => s+(t.tax||0), 0);
+  const rendimento = (plOpen||0) + plClose + cedole - tax;
+  const mp = mediaPesata(txs, jan1, dec31);
+  const pct = mp > 0 ? (rendimento/mp)*100 : null;
+  const fees=txs.filter(t=>t.date>=jan1&&t.date<=dec31).reduce((s,t)=>s+(t.commission||0),0);
+  return {plOpen, plClose, cedole, tax, fees, costs:tax+fees, rendimento, pct, mediaInv:mp, lastSnap};
+}
+function monthMetrics(txs, snaps, year, mi) {
+  const yr = String(year), mStr = String(mi+1).padStart(2,"0");
+  // Fix: use actual last day of month instead of always 31
+  const lastDay = new Date(year, mi+1, 0).getDate();
+  const mEnd = `${yr}-${mStr}-${String(lastDay).padStart(2,"0")}`;
+  const prevMEnd = mi===0 ? `${year-1}-12-31` : `${yr}-${String(mi).padStart(2,"0")}-31`;
+
+  // Need a snap in this month
+  const hasSnap = snaps.some(s => {
+    const sm = parseInt(s.date.slice(5,7))-1;
+    return parseInt(s.date.slice(0,4))===year && sm===mi;
+  });
+  if (!hasSnap) return null;
+
+  const snapEnd = snapAt(snaps, mEnd);
+  if (snapEnd == null) return null;
+  // If no snapshot exists before this month (e.g. first month of first year),
+  // use the earliest available snapshot as baseline instead of zero
+  const snapPrevRaw = snapAt(snaps, prevMEnd);
+  const snapPrev = snapPrevRaw !== null ? snapPrevRaw : snapAt(snaps, `${yr}-01-01`) || 0;
+  const prevMEndEff = snapPrevRaw !== null ? prevMEnd : `${yr}-01-01`;
+  const plOpen = (snapEnd - investitoAt(txs, mEnd)) - (snapPrev - investitoAt(txs, prevMEndEff));
+  // When baseline is jan1 (first month of data), include jan1 itself (>=)
+  // Otherwise use exclusive (>) as normal month boundary
+  const inclFrom = snapPrevRaw === null; // true only for first month of first year
+  const afterPrev = t => inclFrom ? t.date>=prevMEndEff : t.date>prevMEndEff;
+  const plClose = (() => {
+    const sells = [...txs].filter(t => t.type==="SELL" && afterPrev(t) && t.date<=mEnd)
+      .sort((a,b) => a.date.localeCompare(b.date));
+    let tot=0;
+    for(const sell of sells){
+      const pb=wavgAt(txs.filter(t=>t.date<sell.date),sell.date);
+      const pp=pb[sell.instrument];
+      const pmc=pp&&pp.qty>0?pp.cost/pp.qty:0;
+      tot+=sell.totale-pmc*sell.qty-(sell.commission||0);
+    }
+    return tot;
+  })();
+  const cedole = txs.filter(t => t.type==="INCOME" && afterPrev(t) && t.date<=mEnd)
+    .reduce((s,t) => s+(t.amount||0), 0);
+  const tax = txs.filter(t => afterPrev(t) && t.date<=mEnd)
+    .reduce((s,t) => s+(t.tax||0), 0);
+  const rendimento = plOpen + plClose + cedole - tax;
+  const mStart = `${yr}-${mStr}-01`;
+  const mp = mediaPesata(txs, mStart > prevMEnd ? mStart : prevMEnd, mEnd);
+  const pct = mp > 0 ? (rendimento/mp)*100 : null;
+  return {plOpen, plClose, cedole, tax, rendimento, pct, mediaInv:mp};
+}
+
+// ── Charts ────────────────────────────────────────────────────────────────────
+function LineChart({pts}) {
+  const [act, setAct] = useState(null);
+  const valid = pts.filter(p => p.y != null);
+  if (!valid.length) return <div className="empty" style={{padding:14,fontSize:11}}>Nessun dato</div>;
+  const W=700,H=155,pL=52,pR=16,pT=10,pB=26;
+  const iW=W-pL-pR, iH=H-pT-pB;
+  const ys = valid.map(p => p.y);
+  const mn=Math.min(0,...ys), mx=Math.max(0,...ys), rng=mx-mn||1;
+  const xOf = i => pL + (i/(pts.length-1||1))*iW;
+  const yOf = v => pT + iH - ((v-mn)/rng)*iH;
+  const y0 = yOf(0);
+  const vp = pts.map((p,i) => p.y!=null ? {x:xOf(i), y:yOf(p.y), v:p.y, lbl:p.x, i} : null).filter(Boolean);
+  const path = vp.map((p,j) => `${j===0?"M":"L"}${p.x},${p.y}`).join(" ");
+  const area = vp.length>1 ? `${path} L${vp[vp.length-1].x},${y0} L${vp[0].x},${y0}Z` : "";
+  return (
+    <div style={{position:"relative"}} onClick={()=>setAct(null)}>
+      {act!=null && vp.find(p=>p.i===act) && (()=>{
+        const p = vp.find(q=>q.i===act);
+        return <div style={{position:"absolute",top:4,left:"50%",transform:"translateX(-50%)",
+          background:"var(--s2)",border:"1px solid var(--b)",borderRadius:6,
+          padding:"3px 12px",fontFamily:"var(--mono)",fontSize:11,
+          color:p.v>=0?"var(--g)":"var(--r)",pointerEvents:"none",whiteSpace:"nowrap",zIndex:10}}>
+          {p.lbl} — {fN(p.v)}
+        </div>;
+      })()}
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{height:155,display:"block"}}>
+        <defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#3b82f6" stopOpacity=".25"/>
+          <stop offset="100%" stopColor="#3b82f6" stopOpacity="0"/>
+        </linearGradient></defs>
+        <line x1={pL} y1={y0} x2={W-pR} y2={y0} stroke="var(--b)" strokeWidth="1" strokeDasharray="4 3"/>
+        {[mn,0,mx].filter((v,i,a)=>a.indexOf(v)===i).map((v,i)=>(
+          <text key={i} x={pL-4} y={yOf(v)+4} textAnchor="end" fontSize="9" fill="var(--m)" fontFamily="JetBrains Mono,monospace">
+            {Math.abs(v)>=1000?`${v<0?"-":""}${(Math.abs(v)/1000).toFixed(1)}k`:fN(v)}
+          </text>
+        ))}
+        {pts.map((p,i)=><text key={i} x={xOf(i)} y={H-2} textAnchor="middle" fontSize="9" fill="var(--m)" fontFamily="JetBrains Mono,monospace">{p.x}</text>)}
+        {area&&<path d={area} fill="url(#lg)"/>}
+        {path&&<path d={path} fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinejoin="round"/>}
+        {vp.map((p,j)=>(
+          <circle key={j} cx={p.x} cy={p.y} r="6" fill={p.v>=0?"var(--g)":"var(--r)"} opacity=".9"
+            style={{cursor:"pointer"}}
+            onClick={e=>{e.stopPropagation();setAct(act===p.i?null:p.i);}}
+            onMouseEnter={()=>setAct(p.i)} onMouseLeave={()=>{}}
+          />
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+function BarChart({pts, onBar}) {
+  const [act,setAct]=useState(null);
+  const W=700,H=145,pL=52,pR=16,pT=10,pB=26;
+  const iW=W-pL-pR, iH=H-pT-pB;
+  const vals = pts.map(p=>p.y??0);
+  const am = Math.max(1,...vals.map(Math.abs));
+  const bW = iW/pts.length*0.6;
+  const xOf = i => pL+(i/pts.length)*iW+(iW/pts.length)*0.2;
+  const y0 = pT+iH/2, sc = (iH/2)/am;
+  if (!pts.some(p=>p.y!=null)) return <div className="empty" style={{padding:14,fontSize:11}}>Nessun dato</div>;
+  return (
+    <div style={{position:"relative"}} onClick={()=>setAct(null)}>
+      {act!=null && pts[act]?.y!=null && (
+        <div style={{position:"absolute",top:4,left:"50%",transform:"translateX(-50%)",
+          background:"var(--s2)",border:"1px solid var(--b)",borderRadius:6,
+          padding:"3px 12px",fontFamily:"var(--mono)",fontSize:11,
+          color:pts[act].y>=0?"var(--g)":"var(--r)",pointerEvents:"none",whiteSpace:"nowrap",zIndex:10}}>
+          {pts[act].x} — {fN(pts[act].y)}
+        </div>
+      )}
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{height:145,display:"block"}}>
+        <line x1={pL} y1={y0} x2={W-pR} y2={y0} stroke="var(--b)" strokeWidth="1"/>
+        {vals.map((v,i)=>{const h=Math.abs(v)*sc; const y=v>=0?y0-h:y0; return(
+          <rect key={i} x={xOf(i)} y={y} width={bW} height={Math.max(1,h)}
+            fill={v>=0?"var(--g)":"var(--r)"} rx="2"
+            opacity={pts[i].y==null?0.1:act===i?1:0.75}
+            style={{cursor:"pointer"}}
+            onClick={e=>{e.stopPropagation(); setAct(act===i?null:i);}}
+            onMouseEnter={()=>setAct(i)} onMouseLeave={()=>{}}
+          />
+        );})}
+        {[am,0,-am].map((v,i)=>(
+          <text key={i} x={pL-4} y={y0-v*sc+4} textAnchor="end" fontSize="9" fill="var(--m)" fontFamily="JetBrains Mono,monospace">
+            {Math.abs(v)>=1000?`${v<0?"-":""}${(Math.abs(v)/1000).toFixed(0)}k`:fN(v)}
+          </text>
+        ))}
+        {pts.map((p,i)=>(
+          <text key={i} x={xOf(i)+bW/2} y={H-2} textAnchor="middle" fontSize="9"
+            fill={act===i?"var(--t)":"var(--m)"} fontFamily="JetBrains Mono,monospace">{p.x}</text>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+const INST_COLORS = ["#3b82f6","#22c55e","#f59e0b","#ef4444","#a78bfa","#fb923c","#34d399","#e879f9"];
+function StackedBar({byMonth, insts, activeMi, onBar, onClear}) {
+  const W=700,H=155,pL=50,pR=16,pT=10,pB=26,iW=W-pL-pR,iH=H-pT-pB;
+  const bW=iW/12*0.6, xOf=i=>pL+(i/12)*iW+(iW/12)*0.2;
+  const tots=Array.from({length:12},(_,i)=>Object.values(byMonth[i]||{}).reduce((s,v)=>s+v,0));
+  const mx=Math.max(1,...tots);
+  if (!tots.some(v=>v>0)) return <div className="empty" style={{padding:14,fontSize:11}}>Nessuna cedola</div>;
+  return (
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{height:155,display:"block",cursor:"pointer"}}
+      onClick={e=>{ if(e.target.tagName!=="rect") onClear&&onClear(); }}>
+      {Array.from({length:12},(_,mi)=>{
+        let yo=pT+iH;
+        const isHi = activeMi==null || activeMi===mi;
+        return insts.map((inst,ci)=>{
+          const v=(byMonth[mi]||{})[inst]||0; const h=(v/mx)*iH; yo-=h;
+          return v>0 ? <rect key={`${mi}-${ci}`} x={xOf(mi)} y={yo} width={bW} height={Math.max(1,h)}
+            fill={INST_COLORS[ci%INST_COLORS.length]} rx="2" opacity={isHi?0.9:0.18}
+            style={{cursor:"pointer"}}
+            onClick={e=>{e.stopPropagation(); onBar&&onBar(activeMi===mi?null:mi);}}
+          /> : null;
+        });
+      }).flat().filter(Boolean)}
+      {[0,mx/2,mx].map((v,i)=>(
+        <text key={i} x={pL-4} y={pT+iH-(v/mx)*iH+4} textAnchor="end" fontSize="9" fill="var(--m)" fontFamily="JetBrains Mono,monospace">
+          {v>=1000?`${(v/1000).toFixed(1)}k`:v.toFixed(0)}
+        </text>
+      ))}
+      {MN.map((m,i)=>(
+        <text key={i} x={xOf(i)+bW/2} y={H-2} textAnchor="middle" fontSize="9"
+          fill={activeMi===i?"var(--t)":"var(--m)"}
+          fontWeight={activeMi===i?"700":"400"}
+          fontFamily="JetBrains Mono,monospace">{m}</text>
+      ))}
+    </svg>
+  );
+}
+
+function Donut({slices, total}) {
+  if (!total||!slices.length) return <div className="empty">Nessuna posizione aperta</div>;
+  const R=82,cx=130,cy=100,ir=50,single=slices.length===1;
+  let ang=-Math.PI/2;
+  const arcs=slices.map((s,ci)=>{
+    const col=acColor(s.label);
+    if (single) return{...s,path:null,col};
+    const sw=(s.value/total)*2*Math.PI*0.999;
+    const x1=cx+R*Math.cos(ang),y1=cy+R*Math.sin(ang); ang+=sw;
+    const x2=cx+R*Math.cos(ang),y2=cy+R*Math.sin(ang);
+    const lg=sw>Math.PI?1:0;
+    const xi1=cx+ir*Math.cos(ang-sw),yi1=cy+ir*Math.sin(ang-sw);
+    const xi2=cx+ir*Math.cos(ang),yi2=cy+ir*Math.sin(ang);
+    return{...s,path:`M${x1},${y1} A${R},${R} 0 ${lg} 1 ${x2},${y2} L${xi2},${yi2} A${ir},${ir} 0 ${lg} 0 ${xi1},${yi1}Z`,col};
+  });
+  return (
+    <div style={{display:"flex",justifyContent:"center"}}>
+      <svg width="260" height="200" viewBox="0 0 260 200">
+        {arcs.map((a,i)=>a.path
+          ?<path key={i} d={a.path} fill={a.col} opacity=".9"/>
+          :<g key={i}><circle cx={cx} cy={cy} r={R} fill={a.col} opacity=".9"/><circle cx={cx} cy={cy} r={ir} fill="var(--s1)"/></g>
+        )}
+        <text x={cx} y={cy-5} textAnchor="middle" fontSize="9" fill="var(--m)" fontFamily="JetBrains Mono,monospace">TOTALE</text>
+        <text x={cx} y={cy+11} textAnchor="middle" fontSize="12" fill="var(--t)" fontFamily="JetBrains Mono,monospace" fontWeight="700">
+          {total>=1000?`${(total/1000).toFixed(1)}k`:fN(total)}
+        </text>
+      </svg>
+    </div>
+  );
+}
+
+const EMPTY={date:today(),type:"BUY",assetClass:"",instrument:"",isin:"",ticker:"",anagrafeId:null,qty:"",price:"",commission:"",tax:"",amount:""};
+
+function LiveView({livePositions,bondPositions,livePrices,bondPrices,liveLoading,snaps,setSnaps,setSyncStatus,liveDonut,setLiveDonut,onClickInst,onRefresh,sbUpdate,sbInsert,snapToRow}) {
+  var totLiveCtv=0, totBondCtv=0;
+  livePositions.forEach(function(p){
+    var lp=p.ticker?livePrices[p.ticker]:null;
+    // use live price if available, otherwise fallback to cost (investito)
+    totLiveCtv+=lp&&lp.price>0?lp.price*p.qty:p.cost;
+  });
+  var totBondLiveCtv=0, hasBondLive=false;
+  bondPositions.forEach(function(p){
+    var bp=p.isin?bondPrices[p.isin]:null;
+    if(bp&&bp.price>0){
+      totBondLiveCtv+=bp.price/100*p.qty; // price is %, ctv = price/100 * qty
+      hasBondLive=true;
+    } else {
+      totBondLiveCtv+=p.cost; // fallback to cost
+    }
+    totBondCtv+=p.cost;
+  });
+  var grandTotal=totLiveCtv+totBondLiveCtv;
+
+  var byAC={};
+  livePositions.forEach(function(p){
+    var lp=p.ticker?livePrices[p.ticker]:null;
+    var v=lp&&lp.price>0?lp.price*p.qty:p.cost;
+    byAC[p.assetClass]=(byAC[p.assetClass]||0)+v;
+  });
+  byAC["Obbligazioni"]=(byAC["Obbligazioni"]||0)+totBondLiveCtv;
+  var donutSlices=Object.entries(byAC).map(function(e){
+    return {label:e[0],value:e[1],pct:grandTotal>0?(e[1]/grandTotal)*100:0};
+  });
+
+  function handleSnap() {
+    var d=today();
+    var existing=snaps.find(function(s){return s.date===d;});
+    setSyncStatus("saving");
+    var val=Math.round(grandTotal*100)/100;
+    if(existing){
+      sbUpdate("snapshot",existing.id,snapToRow({date:d,value:val})).then(function(){
+        setSnaps(function(p){return p.map(function(s){return s.id===existing.id?Object.assign({},s,{value:val}):s;});});
+        setSyncStatus("saved");setTimeout(function(){setSyncStatus("");},2000);
+      }).catch(function(){setSyncStatus("error");});
+    } else {
+      sbInsert("snapshot",snapToRow({date:d,value:val})).then(function(ins){
+        var ns={id:ins&&ins.id?ins.id:Date.now(),date:d,value:val};
+        setSnaps(function(p){return [...p,ns].sort(function(a,b){return a.date.localeCompare(b.date);});});
+        setSyncStatus("saved");setTimeout(function(){setSyncStatus("");},2000);
+      }).catch(function(){setSyncStatus("error");});
+    }
+  }
+
+  return (
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:11}}>
+        <div style={{fontSize:10,color:"var(--m)",fontFamily:"var(--mono)"}}>Prezzi in tempo reale</div>
+        <button className="btn bp" style={{fontSize:10,padding:"5px 12px"}} onClick={onRefresh} disabled={liveLoading}>
+          {liveLoading?"⏳ Carico...":"↻ Aggiorna"}
+        </button>
+      </div>
+
+      <div className="tbl" style={{marginBottom:14}}>
+        <table>
+          <thead><tr>
+            <th>Asset</th><th>Qtà</th><th>PMC</th><th>Investito</th>
+            <th>Prezzo Live</th><th>Ctv. Live</th><th>Diff €</th><th>Diff %</th>
+          </tr></thead>
+          <tbody>
+            {(()=>{
+              var totInv2=0,totCtv2=0,totDiff2=0,hasLivePrice=false;
+              livePositions.forEach(function(p){
+                var lp=p.ticker?livePrices[p.ticker]:null;
+                var livePrice=lp&&lp.price?lp.price:null;
+                totInv2+=p.cost; // always add investito
+                if(livePrice!=null){totCtv2+=livePrice*p.qty;totDiff2+=(livePrice*p.qty-p.cost);hasLivePrice=true;}
+              });
+              var totDiffPct2=totInv2>0&&hasLivePrice?(totDiff2/totInv2)*100:null;
+              return [
+                livePositions.map(function(p,i){
+                  var pmc=p.qty>0?p.cost/p.qty:0;
+                  var lp=p.ticker?livePrices[p.ticker]:null;
+                  var livePrice=lp&&lp.price?lp.price:null;
+                  var ctv=livePrice!=null?livePrice*p.qty:null;
+                  var diff=ctv!=null?ctv-p.cost:null;
+                  var diffPct=p.cost>0&&diff!=null?(diff/p.cost)*100:null;
+                  var grey=!p.ticker||(lp&&lp.error);
+                  return (
+                    <tr key={"a"+i} style={{opacity:grey?0.4:1,cursor:"pointer"}} onClick={function(){onClickInst(p.instrument);}}>
+                      <td><div style={{fontWeight:600,color:acColor(p.assetClass)}}>{p.instrument}</div>
+                        {p.ticker&&<div style={{fontSize:9,color:"var(--m)"}}>{p.ticker}</div>}
+                        {!p.ticker&&<div style={{fontSize:9,color:"var(--y)"}}>ticker mancante</div>}
+                        {lp&&lp.error&&<div style={{fontSize:9,color:"var(--r)"}}>{lp.error}</div>}
+                      </td>
+                      <td>{fN(p.qty,p.qty%1===0?0:2)}</td>
+                      <td>{fN(pmc,2)}</td>
+                      <td>{fN(p.cost)}</td>
+                      <td className={grey?"mu":livePrice>=pmc?"green":"red"}>{livePrice!=null?fN(livePrice,2):"—"}</td>
+                      <td className={grey?"mu":sgn(diff)}>{ctv!=null?fN(ctv):"—"}</td>
+                      <td className={grey?"mu":sgn(diff)}>{diff!=null?fN(diff):"—"}</td>
+                      <td className={grey?"mu":sgn(diffPct)}>{diffPct!=null?fP(diffPct,2):"—"}</td>
+                    </tr>
+                  );
+                }),
+                <tr key="atot" style={{borderTop:"1px solid var(--b)",fontWeight:700}}>
+                  <td style={{color:"#fff"}}>TOT. AZIONI</td>
+                  <td/><td/>
+                  <td className="neu">{fN(totInv2)}</td>
+                  <td/>
+                  <td className="neu">{hasLivePrice?fN(totCtv2):"—"}</td>
+                  <td className={sgn(totDiff2)}>{hasLivePrice?fN(totDiff2):"—"}</td>
+                  <td className={sgn(totDiffPct2)}>{totDiffPct2!=null?fP(totDiffPct2,2):"—"}</td>
+                </tr>,
+                bondPositions.length>0&&<tr key="bhead">
+                  <td colSpan="8" style={{background:"var(--bg)",fontSize:9,color:"var(--m)",textTransform:"uppercase",letterSpacing:".08em",padding:"8px 11px"}}>Obbligazioni</td>
+                </tr>,
+                bondPositions.map(function(p,i){
+                  var pmc=p.qty>0?p.cost/p.qty:0;
+                  var bp=p.isin?bondPrices[p.isin]:null;
+                  var livePrice=bp&&bp.price>0?bp.price:null;
+                  var ctv=livePrice!=null?livePrice/100*p.qty:null;
+                  var diff=ctv!=null?ctv-p.cost:null;
+                  var diffPct=p.cost>0&&diff!=null?(diff/p.cost)*100:null;
+                  var grey=!p.isin||(bp&&bp.error);
+                  return (
+                    <tr key={"b"+i} style={{opacity:grey?0.4:1,cursor:"pointer"}} onClick={function(){onClickInst(p.instrument);}}>
+                      <td style={{fontWeight:600,color:acColor("Obbligazioni")}}>{p.instrument}</td>
+                      <td>{fN(p.qty,0)}</td>
+                      <td>{fN(pmc*100,2)}</td>
+                      <td className="neu">{fN(p.cost)}</td>
+                      <td className={grey?"mu":livePrice>=pmc*100?"green":"red"}>{livePrice!=null?fN(livePrice,2):"—"}</td>
+                      <td className={grey?"mu":sgn(diff)}>{ctv!=null?fN(ctv):"—"}</td>
+                      <td className={grey?"mu":sgn(diff)}>{diff!=null?fN(diff):"—"}</td>
+                      <td className={grey?"mu":sgn(diffPct)}>{diffPct!=null?fP(diffPct,2):"—"}</td>
+                    </tr>
+                  );
+                }),
+                bondPositions.length>0&&(()=>{
+                  var totBInv=0,totBCtv=0,totBDiff=0,hasBP=false;
+                  bondPositions.forEach(function(p){
+                    var bp=p.isin?bondPrices[p.isin]:null;
+                    var livePrice=bp&&bp.price>0?bp.price:null;
+                    totBInv+=p.cost;
+                    if(livePrice!=null){totBCtv+=livePrice/100*p.qty;totBDiff+=(livePrice/100*p.qty-p.cost);hasBP=true;}
+                  });
+                  var totBPct=totBInv>0&&hasBP?(totBDiff/totBInv)*100:null;
+                  return <tr key="btot" style={{borderTop:"1px solid var(--b)",fontWeight:700}}>
+                    <td style={{color:"#fff"}}>TOT. OBBLIGAZIONI</td><td/><td/>
+                    <td className="neu">{fN(totBInv)}</td>
+                    <td/>
+                    <td className="neu">{hasBP?fN(totBCtv):"—"}</td>
+                    <td className={sgn(totBDiff)}>{hasBP?fN(totBDiff):"—"}</td>
+                    <td className={sgn(totBPct)}>{totBPct!=null?fP(totBPct,2):"—"}</td>
+                  </tr>;
+                })()
+              ];
+            })()}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,padding:"14px 16px",marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:9,color:"var(--m)",textTransform:"uppercase",letterSpacing:".1em",marginBottom:4}}>Totale Portafoglio</div>
+            <div style={{fontFamily:"var(--mono)",fontSize:22,fontWeight:700,color:"var(--t)"}}>{fN(grandTotal)}</div>
+            <div style={{fontSize:9,color:"var(--m)",marginTop:3}}>{fN(totLiveCtv)} azioni + {fN(totBondLiveCtv)} obbligazioni</div>
+            <div style={{fontSize:9,color:"var(--m)",marginTop:1}}>Diff: <span className={sgn(grandTotal-(totInv2+totBondCtv))}>{fN(grandTotal-(totInv2+totBondCtv))}</span> / <span className={sgn((grandTotal-(totInv2+totBondCtv))/(totInv2+totBondCtv)*100)}>{(totInv2+totBondCtv)>0?fP((grandTotal-(totInv2+totBondCtv))/(totInv2+totBondCtv)*100,2):"—"}</span></div>
+          </div>
+          <div style={{display:"flex",gap:8,flexDirection:"column"}}>
+            <button className="btn bp" style={{fontSize:11,padding:"8px 14px"}} onClick={handleSnap}>📸 Snapshot oggi</button>
+            <button className="btn bg_" style={{fontSize:11,padding:"8px 14px"}} onClick={function(){setLiveDonut(true);}}>🍩 Allocazione</button>
+          </div>
+        </div>
+      </div>
+
+      {liveDonut&&(
+        <div className="modal-bg" onClick={function(){setLiveDonut(false);}}>
+          <div className="modal" style={{maxWidth:400}} onClick={function(e){e.stopPropagation();}}>
+            <div className="mhdr">
+              <div className="mtitle">Allocazione Portafoglio</div>
+              <button className="mx" onClick={function(){setLiveDonut(false);}}>✕</button>
+            </div>
+            <Donut slices={donutSlices} total={grandTotal}/>
+            <div style={{marginTop:12}}>
+              {donutSlices.map(function(s,i){
+                return (
+                  <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid var(--b)",fontFamily:"var(--mono)",fontSize:12}}>
+                    <span style={{color:acColor(s.label),fontWeight:600}}>{s.label}</span>
+                    <span style={{color:"var(--t)"}}>{fN(s.value)} <span style={{color:"var(--m)"}}>{fP(s.pct,1)}</span></span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+const CORRECT_PWD = "ptf2025";  // <-- cambia qui la password
+
+function App() {
+  const [auth,setAuth]   = useState(()=>sessionStorage.getItem("ptf_auth")==="1");
+  const [pwd,setPwd]     = useState("");
+  const [pwdErr,setPwdErr] = useState(false);
+  const [txs,setTxs]     = useState([]);
+  const [snaps,setSnaps] = useState([]);
+  const snapsRef = React.useRef(snaps);
+  useEffect(()=>{ snapsRef.current = snaps; },[snaps]);
+  const [anagrafe,setAnagrafe] = useState([]);
+  const [ready,setReady] = useState(false);
+  const [tab,setTab]     = useState("dashboard");
+  const [period,setPeriod] = useState("ALL");
+  const [modal,setModal]   = useState(null);
+  const [sellModal,setSellModal] = useState(false);
+  const [cedoleModal,setCedoleModal] = useState(false);
+  const [activeCedMi,setActiveCedMi] = useState(null); // active month in cedole chart
+  const [form,setForm]   = useState(EMPTY);
+  const [ferr,setFerr]   = useState({});
+  const [snapForm,setSnapForm] = useState({date:today(),value:""});
+  const [serr,setSerr]   = useState({});
+  const [snapEdit,setSnapEdit] = useState(null); // snap being edited
+  const [txF,setTxF]     = useState({type:"ALL",ac:"ALL",inst:null});
+  const [livePrices,setLivePrices] = useState({});
+  const [bondPrices,setBondPrices] = useState({});
+  const [liveLoading,setLiveLoading] = useState(false);
+  const [liveDonut,setLiveDonut] = useState(false);
+
+  const [syncStatus,setSyncStatus] = useState("loading");
+
+  // Load directly from Supabase on mount
+  useEffect(()=>{
+    (async()=>{
+      try {
+        const [tRows, sRows, aRows] = await Promise.all([
+          sbLoad("transactions_new"),
+          sbLoad("snapshot"),
+          sbLoad("anagrafe"),
+        ]);
+        const anagList = aRows.map(rowToAnagrafe);
+        const anagMap = Object.fromEntries(anagList.map(a=>[a.id,a]));
+        setAnagrafe(anagList);
+        setTxs(tRows.map(r=>rowToTx(r,anagMap)));
+        setSnaps(sRows.map(rowToSnap));
+        setSyncStatus("");
+      } catch(e) {
+        console.error(e);
+        setSyncStatus("error");
+      }
+      setReady(true);
+    })();
+  },[]);
+
+  const curYear = new Date().getFullYear();
+
+  const years = useMemo(()=>{
+    const s=[...snaps].sort((a,b)=>a.date.localeCompare(b.date));
+    if(!s.length) return [];
+    const fy=parseInt(s[0].date.slice(0,4)), ly=parseInt(s[s.length-1].date.slice(0,4));
+    return Array.from({length:ly-fy+1},(_,i)=>fy+i);
+  },[snaps]);
+
+  const displayYear = period==="ALL" ? null : parseInt(period);
+
+  const periodRange = useMemo(()=>{
+    if(period==="ALL") return {from:"0000-01-01",to:"9999-12-31"};
+    const yr=String(parseInt(period));
+    return {from:`${yr}-01-01`, to:`${yr}-12-31`};
+  },[period]);
+
+  const allYearData = useMemo(()=>
+    years.map(y=>({year:y,...(yearMetrics(txs,snaps,y)||{})}))
+  ,[txs,snaps,years]);
+
+  const monthData = useMemo(()=>{
+    if(!displayYear) return null;
+    return MN.map((_,mi)=>monthMetrics(txs,snaps,displayYear,mi));
+  },[txs,snaps,displayYear]);
+
+  // ALL KPIs
+  const allKpis = useMemo(()=>{
+    const rendimento=allYearData.reduce((s,y)=>s+(y.rendimento||0),0);
+    const cedole=allYearData.reduce((s,y)=>s+(y.cedole||0),0);
+    const tax=allYearData.reduce((s,y)=>s+(y.tax||0),0);
+    const plClose=allYearData.reduce((s,y)=>s+(y.plClose||0),0);
+    const plOpen=allYearData.reduce((s,y)=>s+(y.plOpen||0),0);
+    const fees=txs.reduce((s,t)=>s+(t.commission||0),0);
+    const lastY=allYearData[allYearData.length-1];
+    const mp=lastY?.mediaInv||0;
+    const pct=mp>0?(rendimento/mp)*100:null;
+    return{rendimento,cedole,tax,fees,costs:tax+fees,plClose,plOpen,pct,mediaInv:mp};
+  },[allYearData,txs]);
+
+  const yearKpis = useMemo(()=>{
+    if(!displayYear) return null;
+    return allYearData.find(y=>y.year===displayYear)||null;
+  },[allYearData,displayYear]);
+
+  const kpis = period==="ALL" ? allKpis : yearKpis;
+  const rNeg = kpis && kpis.rendimento < 0;
+
+  // Line chart: ALL = month-by-month across all years; YEAR = month-by-month in year
+  const linePts = useMemo(()=>{
+    if(period==="ALL") {
+      // All months across all years, cumulative
+      const pts = [];
+      let cumul = 0;
+      for (const yd of allYearData) {
+        const yr = yd.year;
+        const months = MN.map((_,mi)=>monthMetrics(txs,snaps,yr,mi));
+        for (let mi=0; mi<12; mi++) {
+          const m = months[mi];
+          const lbl = `${MN[mi]} ${String(yr).slice(2)}`;
+          if (m != null) {
+            cumul += m.rendimento;
+            pts.push({x:lbl, y:cumul});
+          } else {
+            pts.push({x:lbl, y:null});
+          }
+        }
+      }
+      // Remove trailing nulls but keep leading ones
+      return pts;
+    }
+    if (!monthData) return [];
+    let c=0;
+    return MN.map((m,i)=>{
+      if (monthData[i]!=null) { c+=monthData[i].rendimento; return{x:m,y:c}; }
+      return{x:m,y:null};
+    });
+  },[period,allYearData,monthData,txs,snaps]);
+
+  const barPts = useMemo(()=>{
+    if(period==="ALL") return allYearData.map(y=>({x:String(y.year),y:y.rendimento??null}));
+    if(!monthData) return [];
+    return MN.map((m,i)=>({x:m,y:monthData[i]?.rendimento??null}));
+  },[period,allYearData,monthData]);
+
+  const heatPts = useMemo(()=>{
+    if(period==="ALL") return allYearData.map(y=>({x:String(y.year),pct:y.pct??null}));
+    if(!monthData) return [];
+    return MN.map((m,i)=>({x:m,pct:monthData[i]?.pct??null}));
+  },[period,allYearData,monthData]);
+
+  // Sells for modal
+  const periodSells = useMemo(()=>{
+    const from=period==="ALL"?"0000-01-01":`${parseInt(period)-1}-12-31`;
+    const to=period==="ALL"?"9999-12-31":`${period}-12-31`;
+    return sellsInRange(txs,from,to);
+  },[txs,period]);
+
+  // Cedole
+  const cedYear = displayYear||curYear;
+  const cedInsts=useMemo(()=>[...new Set(txs.filter(t=>t.type==="INCOME").map(t=>t.instrument))].sort(),[txs]);
+  const cedByMonth=useMemo(()=>{
+    const m={};
+    for(const t of txs.filter(t=>t.type==="INCOME"&&t.date.startsWith(String(cedYear)))){
+      const mi=parseInt(t.date.slice(5,7))-1;
+      if(!m[mi]) m[mi]={};
+      m[mi][t.instrument]=(m[mi][t.instrument]||0)+(t.amount||0);
+    }
+    return m;
+  },[txs,cedYear]);
+  const taxCedByMonth=useMemo(()=>{
+    const m={};
+    for(const t of txs.filter(t=>t.type==="INCOME"&&t.date.startsWith(String(cedYear)))){
+      const mi=parseInt(t.date.slice(5,7))-1;
+      m[mi]=(m[mi]||0)+(t.tax||0);
+    }
+    return m;
+  },[txs,cedYear]);
+  // ALL view: cedole per year per month
+  const cedByYear=useMemo(()=>{
+    const res={};
+    for(const t of txs.filter(t=>t.type==="INCOME")){
+      const yr=t.date.slice(0,4);
+      const mi=parseInt(t.date.slice(5,7))-1;
+      if(!res[yr]) res[yr]=Array(12).fill(0);
+      res[yr][mi]+=(t.amount||0);
+    }
+    return res;
+  },[txs]);
+  const taxCedByYear=useMemo(()=>{
+    const res={};
+    for(const t of txs.filter(t=>t.type==="INCOME")){
+      const yr=t.date.slice(0,4);
+      if(!res[yr]) res[yr]=0;
+      res[yr]+=(t.tax||0);
+    }
+    return res;
+  },[txs]);
+
+  // Asset
+  const allocData=useMemo(()=>{
+    const pos=wavgAt(txs,periodRange.to);
+    const byAC={};
+    for(const[k,p]of Object.entries(pos)){
+      if(p.qty<=0) continue;
+      const cls=p.assetClass||"Altro";
+      if(!byAC[cls]) byAC[cls]={value:0};
+      byAC[cls].value+=p.cost;
+    }
+    const total=Object.values(byAC).reduce((s,v)=>s+v.value,0);
+    const slices=Object.entries(byAC).map(([label,v])=>({label,value:v.value,pct:(v.value/total)*100}));
+    return{slices,total};
+  },[txs,periodRange]);
+
+
+  const livePositions=useMemo(()=>{
+    const pos=wavgAt(txs,periodRange.to);
+    return Object.values(pos)
+      .filter(p=>p.qty>0&&p.assetClass!=="Obbligazioni")
+      .map(p=>{
+        const anag=anagrafe.find(a=>a.asset===p.instrument)||{};
+        return {...p, ticker:anag.ticker||""};
+      })
+      .sort((a,b)=>a.instrument.localeCompare(b.instrument));
+  },[txs,periodRange,anagrafe]);
+
+  const bondPositions=useMemo(()=>{
+    const pos=wavgAt(txs,periodRange.to);
+    return Object.values(pos)
+      .filter(p=>p.qty>0&&p.assetClass==="Obbligazioni")
+      .sort((a,b)=>a.instrument.localeCompare(b.instrument));
+  },[txs,periodRange]);
+
+  const openPositions=useMemo(()=>{
+    const pos=wavgAt(txs,periodRange.to);
+    return Object.values(pos).filter(p=>p.qty>0).sort((a,b)=>a.instrument.localeCompare(b.instrument));
+  },[txs,periodRange]);
+
+  const filtTxs=useMemo(()=>
+    [...txs]
+      .filter(t=>t.date>=periodRange.from&&t.date<=periodRange.to)
+      .filter(t=>txF.type==="ALL"||t.type===txF.type)
+      .filter(t=>txF.ac==="ALL"||t.assetClass===txF.ac)
+      .filter(t=>!txF.inst||t.instrument===txF.inst)
+      .sort((a,b)=>b.date.localeCompare(a.date))
+  ,[txs,periodRange,txF]);
+
+  const filtSnaps=useMemo(()=>
+    [...snaps].filter(s=>s.date>=periodRange.from&&s.date<=periodRange.to)
+      .sort((a,b)=>b.date.localeCompare(a.date))
+  ,[snaps,periodRange]);
+
+  // Form
+  const instList=useMemo(()=>[...anagrafe].sort((a,b)=>a.asset.localeCompare(b.asset)),[anagrafe]);
+  const sf=k=>e=>setForm(p=>({...p,[k]:e.target.value}));
+  const isI=form.type==="INCOME", isBond=form.assetClass==="Obbligazioni";
+  const totPreview=!isI?(isBond?(+form.qty||0)*(+form.price||0)/100:(+form.qty||0)*(+form.price||0)):null;
+
+  const validate=()=>{
+    const e={};
+    if(!form.date) e.date="Obbligatorio";
+    if(!form.instrument.trim()) e.instrument="Obbligatorio";
+    if(!form.assetClass) e.assetClass="Obbligatorio";
+    if(!form.anagrafeId && !form.isin?.trim()) e.isin="ISIN obbligatorio per nuovo strumento";
+    if(isI&&form.amount==="") e.amount="Obbligatorio";
+    if(!isI&&!form.qty) e.qty="Obbligatorio";
+    if(!isI&&!form.price) e.price="Obbligatorio";
+    return e;
+  };
+  const saveTx=async()=>{
+    const e=validate(); if(Object.keys(e).length){setFerr(e);return;}
+    const qty=isI?0:+form.qty, price=isI?(+form.amount||0):+form.price;
+    const isBondForm=form.assetClass==="Obbligazioni";
+    const totale=isI?(+form.amount||0):(isBondForm?qty*price/100:qty*price);
+    const rec={date:form.date,type:form.type,assetClass:form.assetClass,
+      instrument:form.instrument.trim(),isin:form.isin||"",
+      qty,price,tax:+form.tax||0,commission:+form.commission||0,
+      totale,amount:isI?(+form.amount):null};
+    setSyncStatus("saving");
+    try {
+      if(typeof modal==="string") {
+        // INSERT
+        const row = txToRow(rec);
+        const inserted = await sbInsert("transactions_new", row);
+        const newId = inserted?.id || Date.now();
+        setTxs(p=>[...p,{...rec,id:newId}]);
+        // Auto-snapshot only for BUY / SELL
+        if(rec.type==="BUY" || rec.type==="SELL") {
+          const sortedSnaps = [...snapsRef.current].sort((a,b)=>a.date.localeCompare(b.date));
+          const lastSnap = sortedSnaps[sortedSnaps.length-1];
+          if(lastSnap) {
+            const newVal = rec.type==="BUY"
+              ? Math.round((lastSnap.value + totale)*100)/100
+              : Math.round((lastSnap.value - totale)*100)/100;
+            try {
+              const existing = snapsRef.current.find(s=>s.date===rec.date);
+              let newSnap;
+              if(existing) {
+                // Update existing snapshot for that date
+                await sbUpdate("snapshot", existing.id, snapToRow({date:rec.date, value:newVal}));
+                newSnap = {...existing, value:newVal};
+                setSnaps(p=>p.map(s=>s.id===existing.id?newSnap:s));
+              } else {
+                // Insert new snapshot
+                const sins = await sbInsert("snapshot", snapToRow({date:rec.date, value:newVal}));
+                newSnap = {id:sins?.id||Date.now(), date:rec.date, value:newVal};
+                setSnaps(p=>[...p, newSnap].sort((a,b)=>a.date.localeCompare(b.date)));
+              }
+            } catch(snapErr) {
+              console.warn("Snapshot auto failed:", snapErr);
+            }
+          }
+        }
+      } else {
+        // UPDATE — no snapshot changes
+        const row = txToRow(rec);
+        await sbUpdate("transactions_new", modal.id, row);
+        setTxs(p=>p.map(t=>t.id===modal.id?{...t,...rec}:t));
+      }
+      setSyncStatus("saved"); setTimeout(()=>setSyncStatus(""),2000);
+    } catch(e) {
+      setSyncStatus("error");
+    }
+    setModal(null);
+  };
+  const openAdd=()=>{
+    const base = {...EMPTY};
+    if(txF.inst) {
+      const anag = anagrafe.find(a=>a.asset===txF.inst);
+      if(anag) { base.instrument=anag.asset; base.assetClass=anag.assetClass; base.isin=anag.isin||""; base.ticker=anag.ticker||""; base.anagrafeId=anag.id; }
+    }
+    setForm(base); setFerr({}); setModal("add");
+  };
+  const openEdit=tx=>{
+    setForm({date:tx.date,type:tx.type,assetClass:tx.assetClass,instrument:tx.instrument,
+      isin:tx.isin||"",ticker:tx.ticker||"",anagrafeId:tx.anagrafeId||null,
+      qty:tx.qty||"",price:tx.price||"",
+      tax:tx.tax||"",commission:tx.commission||"",amount:tx.amount!=null?tx.amount:""});
+    setFerr({}); setModal(tx);
+  };
+  const saveSnap=async()=>{
+    const e={};
+    if(!snapForm.date) e.date="Obbligatorio";
+    if(!snapForm.value||+snapForm.value<=0) e.value="Valore > 0";
+    if(Object.keys(e).length){setSerr(e);return;}
+    setSerr({});
+    const d=snapForm.date.slice(0,10);
+    setSyncStatus("saving");
+    try {
+      if(snapEdit) {
+        const s={id:snapEdit,date:d,value:+snapForm.value};
+        const srow=snapToRow(s);
+        await sbUpdate("snapshot",snapEdit,srow);
+        setSnaps(p=>p.map(x=>x.id===snapEdit?s:x).sort((a,b)=>a.date.localeCompare(b.date)));
+        setSnapEdit(null);
+      } else {
+        const srow=snapToRow({date:d,value:+snapForm.value});
+        const inserted2 = await sbInsert("snapshot", srow);
+        const s={id:inserted2?.id||Date.now(), date:d, value:+snapForm.value};
+        setSnaps(p=>[...p,s].sort((a,b)=>a.date.localeCompare(b.date)));
+      }
+      setSyncStatus("saved"); setTimeout(()=>setSyncStatus(""),2000);
+    } catch(e){console.error(e);setSyncStatus("error");}
+    setSnapForm({date:today(),value:""});
+  };
+
+  // Import/Export
+  // Fetch single ticker from Yahoo via proxy, returns {price, currency} or null
+
+
+
+
+  const fetchLivePrices = async (positions, bonds) => {
+    setLiveLoading(true);
+    const HDR = {"Content-Type":"application/json","Authorization":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzeXlyYmtiZ3lqeXp0a2p0YnJtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDk2NjA4MiwiZXhwIjoyMDkwNTQyMDgyfQ.EVuAJT0nXn9te-g-IRDZ_Lyi12s8cWJ6R2_6C60__BI"};
+    // Fetch equity/commodity/crypto prices
+    const toFetch = positions.filter(p=>p.ticker&&p.assetClass!=="Obbligazioni");
+    const results = {};
+    await Promise.all(toFetch.map(async p=>{
+      try {
+        const r = await fetch("https://csyyrbkbgyjyztkjtbrm.supabase.co/functions/v1/prices", {
+          method:"POST", headers:HDR,
+          body:JSON.stringify({ticker:p.ticker}),
+          signal:AbortSignal.timeout(12000)
+        });
+        if(!r.ok) throw new Error("HTTP "+r.status);
+        const d = await r.json();
+        if(d.price&&d.price>0) results[p.ticker]={price:d.price,currency:""};
+        else results[p.ticker]={error:"N/D"};
+      } catch(e) { results[p.ticker]={error:e.message}; }
+    }));
+    setLivePrices(results);
+    // Fetch bond prices via get-bond-price (ISIN based)
+    const bondResults = {};
+    const bondsToFetch = (bonds||[]).filter(p=>p.isin);
+    await Promise.all(bondsToFetch.map(async p=>{
+      try {
+        const r = await fetch("https://csyyrbkbgyjyztkjtbrm.supabase.co/functions/v1/get-bond-price", {
+          method:"POST", headers:HDR,
+          body:JSON.stringify({isin:p.isin}),
+          signal:AbortSignal.timeout(12000)
+        });
+        if(!r.ok) throw new Error("HTTP "+r.status);
+        const d = await r.json();
+        // price from Borsa Italiana is already in % (e.g. 98.64), ctv = price/100 * qty
+        if(d.price&&d.price>0) bondResults[p.isin]={price:d.price};
+        else bondResults[p.isin]={error:"N/D"};
+      } catch(e) { bondResults[p.isin]={error:e.message}; }
+    }));
+    setBondPrices(bondResults);
+    setLiveLoading(false);
+  };
+
+  const exportData=()=>{
+    const headers=["Data","Strumento","ISIN","Tipo Asset","Action","Qtà","Prezzo","Totale","Tax","Commissioni","Amount"];
+    const rows=txs.map(t=>[
+      t.date, t.instrument, t.isin||"", t.assetClass, t.type,
+      t.qty, t.price, t.totale, t.tax||0, t.commission||0, t.amount||""
+    ]);
+    const csv=[headers,...rows].map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(",")).join("\n");
+    const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a"); a.href=url; a.download=`transazioni_${today()}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  };
+
+
+  if(!auth) return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+      height:"100vh",background:"var(--bg)",gap:16,padding:24}}>
+      <div style={{fontFamily:"var(--mono)",fontSize:13,color:"var(--m2)",letterSpacing:".1em",textTransform:"uppercase",marginBottom:4}}>
+        PL Manager
+      </div>
+      <div style={{background:"var(--s1)",border:"1px solid var(--b)",borderRadius:12,padding:28,
+        width:"100%",maxWidth:320,display:"flex",flexDirection:"column",gap:14}}>
+        <div style={{fontFamily:"var(--sans)",fontSize:13,color:"var(--m)",textAlign:"center"}}>Accesso</div>
+        <input
+          type="password"
+          placeholder="Password"
+          value={pwd}
+          onChange={e=>{setPwd(e.target.value);setPwdErr(false);}}
+          onKeyDown={e=>{
+            if(e.key==="Enter"){
+              if(pwd===CORRECT_PWD){sessionStorage.setItem("ptf_auth","1");setAuth(true);}
+              else{setPwdErr(true);setPwd("");}
+            }
+          }}
+          style={{background:"var(--bg)",border:`1px solid ${pwdErr?"var(--r)":"var(--b)"}`,
+            borderRadius:6,padding:"10px 12px",color:"var(--t)",fontFamily:"var(--mono)",
+            fontSize:14,outline:"none",width:"100%",boxSizing:"border-box"}}
+          autoFocus
+        />
+        {pwdErr&&<div style={{color:"var(--r)",fontSize:11,fontFamily:"var(--mono)",textAlign:"center"}}>Password errata</div>}
+        <button
+          onClick={()=>{
+            if(pwd===CORRECT_PWD){sessionStorage.setItem("ptf_auth","1");setAuth(true);}
+            else{setPwdErr(true);setPwd("");}
+          }}
+          style={{background:"var(--bl)",color:"#fff",border:"none",borderRadius:6,
+            padding:"10px",fontFamily:"var(--sans)",fontSize:13,fontWeight:600,cursor:"pointer"}}>
+          Entra
+        </button>
+      </div>
+    </div>
+  );
+
+  if(!ready) return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",
+      background:"var(--bg)",color:"var(--m)",fontFamily:"var(--mono)",fontSize:13,gap:12}}>
+      <div style={{color:"var(--bl)"}}>⏳ Connessione a Supabase...</div>
+      {syncStatus==="error"&&<div style={{color:"var(--r)",fontSize:11}}>Errore di connessione</div>}
+    </div>
+  );
+
+  // Tabs: no "cedole" in nav — accessed from dashboard
+  const TABS=[["dashboard","Dashboard"],["live","Portafoglio"],["transazioni","TX"],["snapshot","Snapshot"]];
+  const prevYears=years.filter(y=>y<curYear);
+  const periodButtons=[["ALL","All"],...prevYears.map(y=>[String(y),String(y)]),[String(curYear),"YTD"]];
+
+  return (<>
+    <style>{css}</style>
+    {syncStatus&&(
+      <div style={{background:syncStatus==="error"?"rgba(239,68,68,.15)":syncStatus==="saving"?"rgba(59,130,246,.1)":"rgba(34,197,94,.1)",
+        borderBottom:"1px solid "+(syncStatus==="error"?"var(--r)":syncStatus==="saving"?"var(--bl)":"var(--g)"),
+        padding:"5px 14px",fontFamily:"var(--mono)",fontSize:10,
+        color:syncStatus==="error"?"var(--r)":syncStatus==="saving"?"var(--bl)":"var(--g)"}}>
+        {syncStatus==="saving"?"💾 Salvataggio...":syncStatus==="saved"?"✓ Salvato su Supabase":"⚠ Errore sync Supabase"}
+      </div>
+    )}
+
+
+    <div className="nav">
+      {TABS.map(([k,l])=><button key={k} className={`nb${tab===k?" on":""}`} onClick={()=>setTab(k)}>{l}</button>)}
+    </div>
+    {tab!=="live"&&<div className="pbar">
+      <span style={{fontSize:9,color:"var(--m)",letterSpacing:".08em",textTransform:"uppercase",marginRight:3}}>Periodo</span>
+      {periodButtons.map(([k,l])=>(
+        <button key={k} className={`pb${period===k?" on":""}`} onClick={()=>setPeriod(k)}>{l}</button>
+      ))}
+    </div>}
+
+    <div className="main">
+
+    {/* DASHBOARD */}
+    {tab==="dashboard"&&<>
+      <div className="k2">
+        <div className={`card ${rNeg?"r":"g"}`}>
+          <div className="cl">Totale P/L Netto {period==="ALL"?"All-Time":"YTD "+period}</div>
+          <div className={`cv lg ${sgn(kpis?.rendimento)}`}>{fN(kpis?.rendimento)}</div>
+        </div>
+        <div className={`card ${rNeg?"r":"g"}`}>
+          <div className="cl">% su Investito</div>
+          <div className={`cv lg ${sgn(kpis?.pct)}`}>{fP(kpis?.pct,2)}</div>
+        </div>
+      </div>
+      <div className="k4">
+        <div className="card"><div className="cl">P/L Open</div><div className={`cv md ${sgn(kpis?.plOpen)}`}>{fN(kpis?.plOpen)}</div></div>
+        <div className="card" style={{cursor:"pointer"}} onClick={()=>setCedoleModal(true)}>
+          <div className="cl">Cedole ↗</div><div className="cv md green">{fN(kpis?.cedole)}</div>
+        </div>
+        <div className="card" style={{cursor:"pointer"}} onClick={()=>setSellModal(true)}>
+          <div className="cl">P/L Close ↗</div><div className={`cv md ${sgn(kpis?.plClose)}`}>{fN(kpis?.plClose)}</div>
+        </div>
+        <div className="card"><div className="cl">Costs</div><div className="cv md red">{kpis?.costs?fN(kpis.costs):"—"}</div></div>
+      </div>
+
+      <div className="panel">
+        <div className="pt">Totale P/L Netto Cumulato</div>
+        <LineChart pts={linePts}/>
+      </div>
+
+      <div className="panel">
+        <div className="pt">% P/L {period==="ALL"?"Annuo":"Mensile"}</div>
+        {period==="ALL"?(
+          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+            {heatPts.map((p,i)=>(
+              <div key={i} className="hc" style={{background:heatCol(p.pct),flex:"1 1 58px",cursor:"pointer"}}
+                onClick={()=>setPeriod(p.x)}>
+                <div className="hcl">{p.x}</div>
+                <div className={`hcv ${p.pct==null?"mu":sgn(p.pct)}`}>{p.pct==null?"·":fP(p.pct)}</div>
+              </div>
+            ))}
+          </div>
+        ):(
+          <div className="hm">
+            {heatPts.map((p,i)=>(
+              <div key={i} className="hc" style={{background:heatCol(p.pct)}}>
+                <div className="hcl">{MN[i]}</div>
+                <div className={`hcv ${p.pct==null?"mu":sgn(p.pct)}`}>{p.pct==null?"·":fP(p.pct)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="panel">
+        <div className="pt">P/L Netto {period==="ALL"?"per Anno":"Mensile"}</div>
+        <BarChart pts={barPts} onBar={period==="ALL"?y=>setPeriod(y):null}/>
+      </div>
+
+      <div style={{fontSize:9.5,color:"var(--m)",lineHeight:1.9,borderLeft:"2px solid var(--bl)",paddingLeft:10,marginTop:4}}>
+        <b style={{color:"var(--m2)"}}>P/L Open</b> = (snap−inv)−(snap_inizio−inv_inizio) &nbsp;|&nbsp;
+        <b style={{color:"var(--m2)"}}>P/L Close</b> = Σ qty_sell×(price_sell−PMC_buy) &nbsp;|&nbsp;
+        <b style={{color:"var(--m2)"}}>Totale P/L Netto</b> = PL_Open + PL_Close + Cedole − Tax
+      </div>
+    </>}
+
+    {/* ASSET */}
+
+    {/* TRANSAZIONI */}
+    {tab==="transazioni"&&<>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:9,flexWrap:"wrap",gap:6}}>
+        <button className="btn bp" onClick={openAdd}>+ Nuova</button>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <span style={{fontSize:10,color:"var(--m)",fontFamily:"var(--mono)"}}>{filtTxs.length}/{txs.length}</span>
+          <button className="btn bg_" style={{fontSize:10,padding:"5px 10px"}} onClick={exportData}>⬇ CSV</button>
+        </div>
+      </div>
+      <div className="fltr">
+        {["ALL","BUY","SELL","INCOME"].map(t=>(
+          <button key={t} className={`ftag${txF.type===t?" on":""}`} onClick={()=>setTxF(f=>({...f,type:t}))}>{t}</button>
+        ))}
+        <span style={{color:"var(--b)"}}>|</span>
+        {["ALL","Obbligazioni","Azioni","Commodities","Crypto","Altro"].map(t=>(
+          <button key={t} className={`ftag${txF.ac===t?" on":""}`} onClick={()=>setTxF(f=>({...f,ac:t}))}>{t==="ALL"?"Tutti":t}</button>
+        ))}
+        {txF.inst&&<button className="ftag on" onClick={()=>setTxF(f=>({...f,inst:null}))}>{txF.inst} ✕</button>}
+      </div>
+      <div className="tbl">
+        {!filtTxs.length?<div className="empty">Nessuna transazione</div>:(
+          <table>
+            <thead><tr><th>Data</th><th>Strumento</th><th>Tipo</th><th>Asset</th><th>Qtà</th><th>Prezzo</th><th>Totale</th><th>Tax</th><th>Fees</th><th></th></tr></thead>
+            <tbody>
+              {filtTxs.map(tx=>(
+                <tr key={tx.id}>
+                  <td style={{textAlign:"left",fontFamily:"var(--mono)",fontSize:10}}>{tx.date}</td>
+                  <td><div style={{fontWeight:600,fontSize:11}}>{tx.instrument}</div>{tx.isin&&<div style={{fontSize:9,color:"var(--m)"}}>{tx.isin}</div>}</td>
+                  <td><span className={`bdg ${tx.type==="BUY"?"bb":tx.type==="SELL"?"bs":"bi"}`}>{tx.type}</span></td>
+                  <td style={{fontSize:10,color:"var(--m)"}}>{tx.assetClass}</td>
+                  <td>{tx.type==="INCOME"?"—":fN(tx.qty,tx.qty%1===0?0:2)}</td>
+                  <td>{tx.type==="INCOME"?"—":fN(tx.price,2)}</td>
+                  <td className={tx.type==="INCOME"?"green":"neu"}>{fN(tx.totale)}</td>
+                  <td>{tx.tax?<span className="red">{fN(tx.tax)}</span>:"—"}</td>
+                  <td>{tx.commission?<span className="red">{fN(tx.commission)}</span>:"—"}</td>
+                  <td style={{display:"flex",gap:2}}>
+                    <button className="ic" onClick={()=>openEdit(tx)}>✏️</button>
+                    <button className="ic del" onClick={async()=>{
+  setSyncStatus("saving");
+  try{await sbDelete("transactions_new",tx.id);setTxs(p=>p.filter(t=>t.id!==tx.id));setSyncStatus("saved");setTimeout(()=>setSyncStatus(""),2000);}
+  catch(e){console.error(e);setSyncStatus("error");}
+}}>✕</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </>}
+
+    {/* SNAPSHOT */}
+    {tab==="snapshot"&&<>
+      <div className="frow" style={{background:"var(--s1)",border:"1px solid var(--b)",borderRadius:9,padding:12,marginBottom:11}}>
+        <div className="fg" style={{minWidth:108}}>
+          <label>Data</label>
+          <input type="date" className={serr.date?"err":""} value={snapForm.date}
+            onChange={e=>setSnapForm(p=>({...p,date:e.target.value}))}/>
+          {serr.date&&<span className="em">{serr.date}</span>}
+        </div>
+        <div className="fg" style={{flex:2,minWidth:155}}>
+          <label>Controvalore</label>
+          <input type="number" className={serr.value?"err":""} placeholder="es. 256000"
+            value={snapForm.value} onChange={e=>setSnapForm(p=>({...p,value:e.target.value}))}/>
+          {serr.value&&<span className="em">{serr.value}</span>}
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:4,alignSelf:"flex-end"}}>
+          <button className="btn bp" onClick={saveSnap}>{snapEdit?"Aggiorna":"Salva"}</button>
+          {snapEdit&&<button className="btn bg_" style={{fontSize:10,padding:"4px 10px"}} onClick={()=>{setSnapEdit(null);setSnapForm({date:today(),value:""});}}>Annulla</button>}
+        </div>
+      </div>
+      <div className="tbl">
+        {!filtSnaps.length?<div className="empty">Nessuno snapshot nel periodo</div>:(
+          <table>
+            <thead><tr><th style={{textAlign:"left"}}>Data</th><th>Controvalore</th><th>Investito</th><th>P/L Open</th><th></th></tr></thead>
+            <tbody>
+              {filtSnaps.map(s=>{
+                const inv=investitoAt(txs,s.date);
+                const plO=s.value-inv;
+                return (
+                  <tr key={s.id}>
+                    <td style={{textAlign:"left"}}>{s.date}</td>
+                    <td className="neu">{fN(s.value)}</td>
+                    <td className="mu">{fN(inv)}</td>
+                    <td className={sgn(plO)}>{fN(plO)}</td>
+                    <td style={{display:"flex",gap:2}}>
+                      <button className="ic" onClick={()=>{setSnapEdit(s.id);setSnapForm({date:s.date,value:String(s.value)});setSerr({});}}>✏️</button>
+                      <button className="ic del" onClick={async()=>{
+  setSyncStatus("saving");
+  try{await sbDelete("snapshot",s.id);setSnaps(p=>p.filter(x=>x.id!==s.id));if(snapEdit===s.id){setSnapEdit(null);setSnapForm({date:today(),value:""});}setSyncStatus("saved");setTimeout(()=>setSyncStatus(""),2000);}
+  catch(e){console.error(e);setSyncStatus("error");}
+}}>✕</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </>}
+
+
+
+    {/* LIVE */}
+    {tab==="live"&&<LiveView
+      livePositions={livePositions}
+      bondPositions={bondPositions}
+      livePrices={livePrices}
+      bondPrices={bondPrices}
+      liveLoading={liveLoading}
+      snaps={snaps}
+      setSnaps={setSnaps}
+      setSyncStatus={setSyncStatus}
+      liveDonut={liveDonut}
+      setLiveDonut={setLiveDonut}
+      onClickInst={(inst)=>{setTxF({type:"ALL",ac:"ALL",inst});setPeriod("ALL");setTab("transazioni");}}
+      onRefresh={()=>fetchLivePrices(livePositions,bondPositions)}
+      sbUpdate={sbUpdate}
+      sbInsert={sbInsert}
+      snapToRow={snapToRow}
+    />}
+
+    </div>{/* end main */}
+
+    {/* SELL MODAL */}
+    {sellModal&&(
+      <div className="modal-bg" onClick={()=>setSellModal(false)}>
+        <div className="modal" onClick={e=>e.stopPropagation()}>
+          <div className="mhdr">
+            <div className="mtitle">P/L Close — {period==="ALL"?"All-Time":period}</div>
+            <button className="mx" onClick={()=>setSellModal(false)}>✕</button>
+          </div>
+          {!periodSells.length?<div className="empty">Nessuna vendita nel periodo</div>:(
+            <div style={{overflowX:"auto"}}>
+              <table>
+                <thead><tr>
+                  <th style={{textAlign:"left"}}>Data</th>
+                  <th style={{textAlign:"left"}}>Strumento</th>
+                  <th>P/L</th><th>Tax</th><th>Fees</th><th>Net</th><th>%</th>
+                </tr></thead>
+                <tbody>
+                  {periodSells.map((s,i)=>(
+                    <tr key={i}>
+                      <td style={{textAlign:"left",fontFamily:"var(--mono)",fontSize:10}}>{s.date}</td>
+                      <td style={{textAlign:"left",fontWeight:600,fontSize:11}}>{s.instrument}</td>
+                      <td className={sgn(s.pl)}>{fN(s.pl)}</td>
+                      <td className="red">{s.tax?fN(s.tax):"—"}</td>
+                      <td className="red">{s.fees?fN(s.fees):"—"}</td>
+                      <td className={sgn(s.net)}>{fN(s.net)}</td>
+                      <td className={sgn(s.pct)}>{s.pct!=null?fP(s.pct):"—"}</td>
+                    </tr>
+                  ))}
+                  <tr style={{borderTop:"1px solid var(--b)"}}>
+                    <td style={{fontWeight:700}}>Totale</td><td/>
+                    <td className={sgn(periodSells.reduce((s,x)=>s+x.pl,0))} style={{fontWeight:700}}>{fN(periodSells.reduce((s,x)=>s+x.pl,0))}</td>
+                    <td className="red" style={{fontWeight:700}}>{fN(periodSells.reduce((s,x)=>s+(x.tax||0),0))}</td>
+                    <td className="red" style={{fontWeight:700}}>{fN(periodSells.reduce((s,x)=>s+(x.fees||0),0))}</td>
+                    <td className={sgn(periodSells.reduce((s,x)=>s+x.net,0))} style={{fontWeight:700}}>{fN(periodSells.reduce((s,x)=>s+x.net,0))}</td>
+                    <td/>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+
+    {/* CEDOLE MODAL */}
+    {cedoleModal&&(
+      <div className="modal-bg" onClick={()=>{setCedoleModal(false);setActiveCedMi(null);}}>
+        <div className="modal" style={{maxWidth:760}} onClick={e=>e.stopPropagation()}>
+          <div className="mhdr">
+            <div className="mtitle">Cedole & Dividendi{period!=="ALL"?" — "+cedYear:""}</div>
+            <button className="mx" onClick={()=>setCedoleModal(false)}>✕</button>
+          </div>
+
+          {period==="ALL" ? (
+            /* ── ALL view: bar per year + year×month table ── */
+            <>
+              <div style={{marginBottom:12,overflowX:"auto",position:"relative"}}
+                onClick={()=>setActiveCedMi(null)}>
+                {(()=>{
+                  const yrs=Object.keys(cedByYear).sort();
+                  const vals=yrs.map(yr=>(cedByYear[yr]||[]).reduce((a,b)=>a+b,0));
+                  const mx=Math.max(1,...vals);
+                  const W=700,H=130,pL=52,pR=16,pT=10,pB=26,iW=W-pL-pR,iH=H-pT-pB;
+                  const bW=iW/yrs.length*0.6;
+                  const xOf=i=>pL+(i/yrs.length)*iW+(iW/yrs.length)*0.2;
+                  const actI=activeCedMi; // reuse state: here stores year index
+                  return(
+                    <div style={{position:"relative"}}>
+                      {actI!=null&&vals[actI]!=null&&(
+                        <div style={{position:"absolute",top:4,left:"50%",transform:"translateX(-50%)",
+                          background:"var(--s2)",border:"1px solid var(--b)",borderRadius:6,
+                          padding:"3px 12px",fontFamily:"var(--mono)",fontSize:11,
+                          color:INST_COLORS[actI%INST_COLORS.length],
+                          pointerEvents:"none",whiteSpace:"nowrap",zIndex:10}}>
+                          {yrs[actI]} — {fN(vals[actI])}
+                        </div>
+                      )}
+                      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{height:130,display:"block"}}>
+                        {vals.map((v,i)=>(
+                          <rect key={i} x={xOf(i)} y={pT+iH-(v/mx)*iH} width={bW}
+                            height={Math.max(1,(v/mx)*iH)}
+                            fill={INST_COLORS[i%INST_COLORS.length]} rx="2"
+                            opacity={actI==null||actI===i?0.9:0.25}
+                            style={{cursor:"pointer"}}
+                            onClick={e=>{e.stopPropagation();setActiveCedMi(actI===i?null:i);}}
+                          />
+                        ))}
+                        {[0,mx/2,mx].map((v,i)=>(
+                          <text key={i} x={pL-4} y={pT+iH-(v/mx)*iH+4} textAnchor="end" fontSize="9" fill="var(--m)" fontFamily="JetBrains Mono,monospace">
+                            {v>=1000?`${(v/1000).toFixed(1)}k`:v.toFixed(0)}
+                          </text>
+                        ))}
+                        {yrs.map((yr,i)=>(
+                          <text key={i} x={xOf(i)+bW/2} y={H-2} textAnchor="middle" fontSize="9"
+                            fill={INST_COLORS[i%INST_COLORS.length]} fontWeight={actI===i?"700":"600"}
+                            fontFamily="JetBrains Mono,monospace">{yr}</text>
+                        ))}
+                      </svg>
+                    </div>
+                  );
+                })()}
+              </div>
+              <div style={{overflowX:"auto"}}>
+                <table>
+                  <thead><tr>
+                    <th>Anno</th>
+                    {MN.map((m,i)=><th key={i}>{m}</th>)}
+                    <th>Totale</th>
+                  </tr></thead>
+                  <tbody>
+                    {Object.keys(cedByYear).sort().map((yr,yi)=>{
+                      const months=cedByYear[yr]||Array(12).fill(0);
+                      const tot=months.reduce((a,b)=>a+b,0);
+                      return(
+                        <tr key={yr}>
+                          <td style={{fontWeight:700,color:INST_COLORS[yi%INST_COLORS.length]}}>{yr}</td>
+                          {months.map((v,i)=><td key={i} className={v>0?"green":v<0?"red":"mu"}>{v?fN(v):"—"}</td>)}
+                          <td className={tot>0?"green":tot<0?"red":"mu"} style={{fontWeight:700}}>{fN(tot)}</td>
+                        </tr>
+                      );
+                    })}
+                    {(()=>{
+                      const allYrs=Object.keys(cedByYear).sort();
+                      const grandTot=allYrs.reduce((s,yr)=>(cedByYear[yr]||[]).reduce((a,b)=>a+b,s),0);
+                      const grandTax=allYrs.reduce((s,yr)=>s+(taxCedByYear[yr]||0),0);
+                      const grandNet=grandTot-grandTax;
+                      return(<>
+                        <tr style={{borderTop:"1px solid var(--b)"}}>
+                          <td style={{fontWeight:700}}>Totale</td>
+                          {Array(12).fill(null).map((_,i)=><td key={i}/>)}
+                          <td className={grandTot>0?"green":grandTot<0?"red":"mu"} style={{fontWeight:700}}>{fN(grandTot)}</td>
+                        </tr>
+                        <tr>
+                          <td style={{color:"var(--m)"}}>Tax</td>
+                          {Array(12).fill(null).map((_,i)=><td key={i}/>)}
+                          <td className={grandTax>0?"red":grandTax<0?"green":"mu"}>{fN(grandTax)}</td>
+                        </tr>
+                        <tr>
+                          <td style={{color:"var(--m)"}}>Net</td>
+                          {Array(12).fill(null).map((_,i)=><td key={i}/>)}
+                          <td className={grandNet>0?"green":grandNet<0?"red":"mu"} style={{fontWeight:700}}>{fN(grandNet)}</td>
+                        </tr>
+                      </>);
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            /* ── YEAR view: stacked bar + instrument×month table ── */
+            <>
+              <div style={{marginBottom:12,overflowX:"auto"}}>
+                <StackedBar byMonth={cedByMonth} insts={cedInsts} activeMi={activeCedMi} onBar={mi=>setActiveCedMi(mi)} onClear={()=>setActiveCedMi(null)}/>
+              </div>
+              <div style={{overflowX:"auto"}}>
+                <table>
+                  <thead><tr>
+                    <th>Strumento</th>
+                    {activeCedMi==null ? MN.map((m,i)=><th key={i}>{m}</th>) : <th>{MN[activeCedMi]}</th>}
+                    {activeCedMi==null && <th>Totale</th>}
+                  </tr></thead>
+                  <tbody>
+                    {cedInsts.map(inst=>{
+                      const tot=activeCedMi!=null
+                        ? (cedByMonth[activeCedMi]||{})[inst]||0
+                        : Object.values(cedByMonth).reduce((s,m)=>s+(m[inst]||0),0);
+                      if(!tot) return null;
+                      return(
+                        <tr key={inst}>
+                          <td style={{color:INST_COLORS[cedInsts.indexOf(inst)%INST_COLORS.length],fontWeight:600}}>{inst}</td>
+                          {activeCedMi!=null
+                            ? <td className="green">{fN(tot)}</td>
+                            : <>{MN.map((_,i)=>{const v=(cedByMonth[i]||{})[inst]||0;
+                                return <td key={i} className={v>0?"green":v<0?"red":"mu"}>{v?fN(v):"—"}</td>;})}
+                              <td className="green" style={{fontWeight:700}}>{fN(tot)}</td></>
+                          }
+                        </tr>
+                      );
+                    })}
+                    {(()=>{
+                      const miList = activeCedMi!=null ? [activeCedMi] : Array.from({length:12},(_,i)=>i);
+                      const totals = miList.map(i=>Object.values(cedByMonth[i]||{}).reduce((s,v)=>s+v,0));
+                      const taxes  = miList.map(i=>taxCedByMonth[i]||0);
+                      const grandTot=totals.reduce((a,b)=>a+b,0);
+                      const grandTax=taxes.reduce((a,b)=>a+b,0);
+                      return (<>
+                        <tr style={{borderTop:"1px solid var(--b)"}}>
+                          <td style={{fontWeight:700}}>Totale</td>
+                          {activeCedMi!=null
+                            ? <td className="green" style={{fontWeight:700}}>{fN(grandTot)}</td>
+                            : <>{miList.map(i=><td key={i} className={totals[i]>0?"green":totals[i]<0?"red":"mu"} style={{fontWeight:700}}>{totals[i]?fN(totals[i]):"—"}</td>)}<td className={grandTot>0?"green":grandTot<0?"red":"mu"} style={{fontWeight:700}}>{fN(grandTot)}</td></>
+                          }
+                        </tr>
+                        <tr>
+                          <td style={{color:"var(--m)"}}>Tax</td>
+                          {activeCedMi!=null
+                            ? <td className="red">{fN(grandTax)}</td>
+                            : <>{miList.map(i=><td key={i} className={taxes[i]>0?"red":taxes[i]<0?"green":"mu"}>{taxes[i]?fN(taxes[i]):"—"}</td>)}<td className={grandTax>0?"red":grandTax<0?"green":"mu"}>{fN(grandTax)}</td></>
+                          }
+                        </tr>
+                        <tr>
+                          <td style={{color:"var(--m)"}}>Net</td>
+                          {activeCedMi!=null
+                            ? <td className="green" style={{fontWeight:700}}>{fN(grandTot-grandTax)}</td>
+                            : <>{miList.map(i=>{const n=totals[i]-taxes[i];return <td key={i} className={n>0?"green":n<0?"red":"mu"}>{n?fN(n):"—"}</td>;})})<td className={grandTot-grandTax>0?"green":grandTot-grandTax<0?"red":"mu"} style={{fontWeight:700}}>{fN(grandTot-grandTax)}</td></>
+                          }
+                        </tr>
+                      </>);
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )}
+
+    {/* TX MODAL */}
+    {modal&&(
+      <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setModal(null)}>
+        <div className="modal">
+          <div className="mhdr">
+            <div className="mtitle">{typeof modal==="string"?"Nuova Transazione":"Modifica Transazione"}</div>
+            <button className="mx" onClick={()=>setModal(null)}>✕</button>
+          </div>
+          <div className="fg2">
+            <div className="fg"><label>Data</label>
+              <input type="date" className={ferr.date?"err":""} value={form.date} onChange={sf("date")}/>
+              {ferr.date&&<span className="em">{ferr.date}</span>}
+            </div>
+            <div className="fg"><label>Tipo</label>
+              <select value={form.type} onChange={sf("type")}>
+                <option value="BUY">BUY</option><option value="SELL">SELL</option><option value="INCOME">CEDOLA/DIV</option>
+              </select>
+            </div>
+            <div className="fg" style={{gridColumn:"span 2"}}>
+              <label>Strumento</label>
+              <input list="il" className={ferr.instrument?"err":""} value={form.instrument}
+                onChange={e=>{
+                  const val=e.target.value;
+                  const anag=instList.find(a=>a.asset===val);
+                  if(anag) setForm(p=>({...p,instrument:val,assetClass:anag.assetClass,isin:anag.isin||"",ticker:anag.ticker||"",anagrafeId:anag.id}));
+                  else setForm(p=>({...p,instrument:val,anagrafeId:null}));
+                }}
+                placeholder="es. AMUNDI MSCI WORLD (o nuovo)"/>
+              <datalist id="il">{instList.map(a=><option key={a.id} value={a.asset}/>)}</datalist>
+              {ferr.instrument&&<span className="em">{ferr.instrument}</span>}
+            </div>
+            <div className="fg"><label>Tipo Asset</label>
+              <select className={ferr.assetClass?"err":""} value={form.assetClass} onChange={sf("assetClass")}>
+                <option value="">— Seleziona —</option>
+                <option value="Obbligazioni">Obbligazioni</option><option value="Azioni">Azioni</option>
+                <option value="Commodities">Commodities</option><option value="Crypto">Crypto</option>
+                <option value="Altro">Altro</option>
+              </select>
+              {ferr.assetClass&&<span className="em">{ferr.assetClass}</span>}
+            </div>
+            {!form.anagrafeId&&(
+              <div className="fg"><label>ISIN <span style={{color:"var(--r)"}}>*</span></label>
+                <input className={ferr.isin?"err":""} value={form.isin||""} onChange={sf("isin")} placeholder="es. IE00B4L5Y983"/>
+                {ferr.isin&&<span className="em">{ferr.isin}</span>}
+              </div>
+            )}
+            <div className="fg"><label>Ticker (opz., es. VWCE.MI)</label>
+              <input value={form.ticker||""} onChange={sf("ticker")} placeholder="es. VWCE.MI"/>
+            </div>
+            {isI?(
+              <div className="fg" style={{gridColumn:"span 2"}}>
+                <label>Importo Lordo</label>
+                <input type="number" step="any" className={ferr.amount?"err":""} value={form.amount} onChange={sf("amount")}/>
+                {ferr.amount&&<span className="em">{ferr.amount}</span>}
+              </div>
+            ):<>
+              <div className="fg"><label>Quantità</label>
+                <input type="number" className={ferr.qty?"err":""} value={form.qty} onChange={sf("qty")}/>
+                {ferr.qty&&<span className="em">{ferr.qty}</span>}
+              </div>
+              <div className="fg"><label>Prezzo {isBond?"(%)":""}</label>
+                <input type="number" className={ferr.price?"err":""} value={form.price} onChange={sf("price")}/>
+                {ferr.price&&<span className="em">{ferr.price}</span>}
+              </div>
+              <div className="fg"><label>Commissioni (opz.)</label>
+                <input type="number" value={form.commission} onChange={sf("commission")} disabled={isI} style={{opacity:isI?0.3:1}}/>
+              </div>
+            </>}
+            {(form.type==="SELL"||isI)&&(
+              <div className="fg"><label>Tax</label>
+                <input type="number" step="any" value={form.tax} onChange={sf("tax")}/>
+              </div>
+            )}
+          </div>
+          {!isI&&totPreview>0&&(
+            <div className="totbox">
+              <span style={{fontSize:10,color:"var(--m)",textTransform:"uppercase",letterSpacing:".08em"}}>Totale{isBond?" · prezzo %":""}</span>
+              <div style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,color:"var(--t)"}}>{fN(totPreview)}</div>
+              {(+form.commission)>0&&<div style={{fontFamily:"var(--mono)",fontSize:12,color:"var(--m)"}}>{fN(totPreview+(+form.commission))} con comm.</div>}
+            </div>
+          )}
+          {isI&&form.amount!==""&&(
+            <div className="totbox">
+              <span style={{fontSize:10,color:"var(--m)",textTransform:"uppercase",letterSpacing:".08em"}}>Netto</span>
+              <div style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,color:"var(--g)"}}>{fN((+form.amount||0)-(+form.tax||0))}</div>
+            </div>
+          )}
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+            <button className="btn bg_" onClick={()=>setModal(null)}>Annulla</button>
+            <button className="btn bp" onClick={saveTx}>{typeof modal==="string"?"Salva":"Aggiorna"}</button>
+          </div>
+        </div>
+      </div>
+    )}
+  </>);
+}
+
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+  </script>
+</body>
+</html>

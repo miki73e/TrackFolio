@@ -209,13 +209,19 @@ async function saveLastKnownPrice(isin, price, source, userId) {
   try {
     const anag = _anagList.find(a=>a.isin && a.isin===isin) || _anagList.find(a=>a.ticker && a.ticker===isin);
     if(!anag?.id) return;
-    await sbUpsert("price_cache_new", {
-      anagrafe_id: anag.id,
-      last_price: price,
-      tipo: source||"live",
-      updated_by: userId||_currentSession?.user?.id,
-      updated_at: new Date().toISOString()
-    }, "anagrafe_id");
+    const hdr = getHdr();
+    const r = await fetchWithTimeout(`${SB_URL}/rest/v1/price_cache_new?on_conflict=anagrafe_id`, {
+      method: "POST",
+      headers: {...hdr, "Prefer": "resolution=merge-duplicates"},
+      body: JSON.stringify({
+        anagrafe_id: anag.id,
+        last_price: price,
+        tipo: source||"live",
+        updated_by: userId||_currentSession?.user?.id,
+        updated_at: new Date().toISOString()
+      })
+    });
+    if(!r.ok) console.warn("price_cache_new failed:", r.status, await r.text());
   } catch(e) { console.warn("price_cache_new save failed", e); }
 }
 
@@ -901,8 +907,8 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
         var displayPrice=p.isBond?livePrice:livePrice; // bond price shown as % directly
 
         result.push(
-          <tr key={ac+i} style={{opacity:grey?0.4:1,cursor:"pointer"}} onClick={function(){if(editingIsin)return;onClickInst(p.instrument);}}>
-            <td>
+          <tr key={ac+i} style={{opacity:grey?0.4:1,cursor:"pointer"}} onClick={function(e){if(editingIsin||e.defaultPrevented)return;onClickInst(p.instrument);}}>
+            <td onClick={function(e){if(isEditing)e.stopPropagation();}}>
               <div style={{display:"flex",alignItems:"center",gap:7}}>
                 <span style={{flexShrink:0,width:8,height:8,borderRadius:"50%",background:acColor(ac)}}/>
                 <div>

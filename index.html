@@ -206,26 +206,16 @@ async function loadPricesCache() {
 async function saveLastKnownPrice(isin, price, source, userId) {
   if(!isin) return;
   _pricesCache[isin] = {price, source: source||"live", updated_at: new Date().toISOString()};
-  console.log("[savePrice] isin:", isin, "price:", price, "source:", source, "_anagList.length:", _anagList.length);
   try {
-    const anag = _anagList.find(a=>a.isin===isin) || _anagList.find(a=>a.ticker===isin);
-    console.log("[savePrice] anag found:", anag);
-    if(!anag?.id) { console.warn("[savePrice] anagrafe not found for", isin); return; }
-    const hdr = getHdr();
-    const row = {
+    const anag = _anagList.find(a=>a.isin && a.isin===isin) || _anagList.find(a=>a.ticker && a.ticker===isin);
+    if(!anag?.id) return;
+    await sbUpsert("price_cache_new", {
       anagrafe_id: anag.id,
       last_price: price,
       tipo: source||"live",
       updated_by: userId||_currentSession?.user?.id,
       updated_at: new Date().toISOString()
-    };
-    console.log("[savePrice] writing row:", row);
-    const res = await fetchWithTimeout(`${SB_URL}/rest/v1/price_cache_new?on_conflict=anagrafe_id`, {
-      method: "POST",
-      headers: {...hdr, "Prefer": "return=minimal,resolution=merge-duplicates"},
-      body: JSON.stringify(row)
-    });
-    console.log("[savePrice] response status:", res.status);
+    }, "anagrafe_id");
   } catch(e) { console.warn("price_cache_new save failed", e); }
 }
 
@@ -925,17 +915,28 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
                       style={{flexShrink:0,cursor:"pointer",fontSize:11,opacity:0.7}}
                       onClick={function(e){e.stopPropagation();setEditingIsin(cacheKey);setEditingVal(manualP?String(manualP.price):"");}}>✏️</span>}
                     {isEditing&&<span onClick={function(e){e.stopPropagation();}} style={{display:"inline-flex",alignItems:"center",gap:4,flexShrink:0}}>
-                      <input autoFocus type="number" step="0.01" placeholder="es. 98.50"
+                      <input autoFocus type="number" inputMode="decimal" step="0.01" placeholder="es. 98.50"
                         style={{width:88,fontSize:13,padding:"2px 5px",background:"var(--s2)",border:"1px solid var(--bl)",borderRadius:4,color:"#ffffff"}}
                         value={editingVal}
                         onClick={function(e){e.stopPropagation();}}
                         onChange={function(e){e.stopPropagation();setEditingVal(e.target.value);}}
                         onKeyDown={function(e){
                           e.stopPropagation();
-                          if(e.key==="Enter"){var v=parseFloat(e.target.value||editingVal);if(v>0){setManualBondPrices(function(prev){var n=Object.assign({},prev);n[cacheKey]={price:v,manual:true};return n;});saveLastKnownPrice(cacheKey,v,"manual",impUid||session?.user?.id);}setEditingIsin(null);}
+                          if(e.key==="Enter"){
+                            var v=parseFloat(e.target.value||editingVal);
+                            if(v>0){setManualBondPrices(function(prev){var n=Object.assign({},prev);n[cacheKey]={price:v,manual:true};return n;});saveLastKnownPrice(cacheKey,v,"manual",impUid||session?.user?.id);}
+                            setEditingIsin(null);
+                          }
                           if(e.key==="Escape"){setEditingIsin(null);}
                         }}/>
-                      <span style={{fontSize:10,color:"var(--m)"}}>↵</span>
+                      <span
+                        onClick={function(e){
+                          e.stopPropagation();
+                          var v=parseFloat(editingVal);
+                          if(v>0){setManualBondPrices(function(prev){var n=Object.assign({},prev);n[cacheKey]={price:v,manual:true};return n;});saveLastKnownPrice(cacheKey,v,"manual",impUid||session?.user?.id);}
+                          setEditingIsin(null);
+                        }}
+                        style={{fontSize:16,cursor:"pointer",padding:"0 4px",color:"var(--g)"}}>✓</span>
                     </span>}
                   </div>
 

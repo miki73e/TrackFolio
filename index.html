@@ -923,9 +923,12 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
                     {isEditing&&<span onClick={function(e){e.stopPropagation();}} style={{display:"inline-flex",alignItems:"center",gap:4,flexShrink:0}}>
                       <input autoFocus type="number" step="0.01" placeholder="es. 98.50"
                         style={{width:88,fontSize:13,padding:"2px 5px",background:"var(--s2)",border:"1px solid var(--bl)",borderRadius:4,color:"#ffffff"}}
-                        value={editingVal} onChange={function(e){setEditingVal(e.target.value);}}
+                        value={editingVal}
+                        onClick={function(e){e.stopPropagation();}}
+                        onChange={function(e){e.stopPropagation();setEditingVal(e.target.value);}}
                         onKeyDown={function(e){
-                          if(e.key==="Enter"){var v=parseFloat(editingVal);if(v>0){setManualBondPrices(function(prev){var n=Object.assign({},prev);n[cacheKey]={price:v,manual:true};return n;});saveLastKnownPrice(cacheKey,v,"manual",impUid||session?.user?.id);}setEditingIsin(null);}
+                          e.stopPropagation();
+                          if(e.key==="Enter"){var v=parseFloat(e.target.value||editingVal);if(v>0){setManualBondPrices(function(prev){var n=Object.assign({},prev);n[cacheKey]={price:v,manual:true};return n;});saveLastKnownPrice(cacheKey,v,"manual",impUid||session?.user?.id);}setEditingIsin(null);}
                           if(e.key==="Escape"){setEditingIsin(null);}
                         }}/>
                       <span style={{fontSize:10,color:"var(--m)"}}>↵</span>

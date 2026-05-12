@@ -206,9 +206,11 @@ async function loadPricesCache() {
 async function saveLastKnownPrice(isin, price, source, userId) {
   if(!isin) return;
   _pricesCache[isin] = {price, source: source||"live", updated_at: new Date().toISOString()};
+  console.log("[savePrice] isin:", isin, "price:", price, "source:", source, "_anagList.length:", _anagList.length);
   try {
     const anag = _anagList.find(a=>a.isin===isin) || _anagList.find(a=>a.ticker===isin);
-    if(!anag?.id) return;
+    console.log("[savePrice] anag found:", anag);
+    if(!anag?.id) { console.warn("[savePrice] anagrafe not found for", isin); return; }
     const hdr = getHdr();
     const row = {
       anagrafe_id: anag.id,
@@ -217,11 +219,13 @@ async function saveLastKnownPrice(isin, price, source, userId) {
       updated_by: userId||_currentSession?.user?.id,
       updated_at: new Date().toISOString()
     };
-    await fetchWithTimeout(`${SB_URL}/rest/v1/price_cache_new?on_conflict=anagrafe_id`, {
+    console.log("[savePrice] writing row:", row);
+    const res = await fetchWithTimeout(`${SB_URL}/rest/v1/price_cache_new?on_conflict=anagrafe_id`, {
       method: "POST",
       headers: {...hdr, "Prefer": "return=minimal,resolution=merge-duplicates"},
       body: JSON.stringify(row)
     });
+    console.log("[savePrice] response status:", res.status);
   } catch(e) { console.warn("price_cache_new save failed", e); }
 }
 

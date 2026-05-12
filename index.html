@@ -210,18 +210,23 @@ async function saveLastKnownPrice(isin, price, source, userId) {
     const anag = _anagList.find(a=>a.isin && a.isin===isin) || _anagList.find(a=>a.ticker && a.ticker===isin);
     if(!anag?.id) return;
     const hdr = getHdr();
-    const r = await fetchWithTimeout(`${SB_URL}/rest/v1/price_cache_new?on_conflict=anagrafe_id`, {
-      method: "POST",
-      headers: {...hdr, "Prefer": "resolution=merge-duplicates"},
-      body: JSON.stringify({
+    const body = JSON.stringify({
         anagrafe_id: anag.id,
         last_price: price,
         tipo: source||"live",
         updated_by: userId||_currentSession?.user?.id,
         updated_at: new Date().toISOString()
-      })
+      });
+    const r = await fetchWithTimeout(`${SB_URL}/rest/v1/price_cache_new?on_conflict=anagrafe_id`, {
+      method: "POST",
+      headers: {...hdr, "Content-Type":"application/json", "Prefer": "resolution=merge-duplicates"},
+      body
     });
-    if(!r.ok) console.warn("price_cache_new failed:", r.status, await r.text());
+    if(!r.ok) {
+      const errText = await r.text();
+      console.error("price_cache_new failed:", r.status, errText);
+      alert("Errore salvataggio prezzo: " + r.status + " " + errText);
+    }
   } catch(e) { console.warn("price_cache_new save failed", e); }
 }
 
@@ -907,13 +912,13 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
         var displayPrice=p.isBond?livePrice:livePrice; // bond price shown as % directly
 
         result.push(
-          <tr key={ac+i} style={{opacity:grey?0.4:1,cursor:"pointer"}} onClick={function(e){if(editingIsin||e.defaultPrevented)return;onClickInst(p.instrument);}}>
+          <tr key={ac+i} style={{opacity:1,cursor:"pointer"}} onClick={function(e){if(editingIsin||e.defaultPrevented)return;onClickInst(p.instrument);}}>
             <td onClick={function(e){if(isEditing)e.stopPropagation();}}>
               <div style={{display:"flex",alignItems:"center",gap:7}}>
                 <span style={{flexShrink:0,width:8,height:8,borderRadius:"50%",background:acColor(ac)}}/>
                 <div>
                   <div style={{display:"flex",alignItems:"center",gap:4}}>
-                    <div style={{fontWeight:600,color:"var(--t)",maxWidth:176,overflow:"hidden",textOverflow:"clip",whiteSpace:"nowrap"}}>
+                    <div style={{fontWeight:600,color:grey?"#94a3b8":"var(--t)",maxWidth:176,overflow:"hidden",textOverflow:"clip",whiteSpace:"nowrap"}}>
                       {p.instrument}
                     </div>
                     {(noPrice||stale||manualP)&&!isEditing&&<span

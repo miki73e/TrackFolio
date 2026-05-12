@@ -195,40 +195,31 @@ async function loadPricesCache() {
     _pricesCache = {};
     (rows||[]).forEach(row => {
       const anag = _anagList.find(a=>a.id===row.anagrafe_id);
-      const key = anag?.isin || anag?.ticker;
-      if(key && row.last_price!=null) {
-        _pricesCache[key] = {price: Number(row.last_price), source: row.tipo||"live", updated_at: row.updated_at};
+      if(anag && row.last_price!=null) {
+        const key = anag.isin || anag.ticker;
+        if(key) _pricesCache[key] = {price: Number(row.last_price), source: row.tipo||"live", updated_at: row.updated_at, anagrafe_id: row.anagrafe_id};
       }
     });
   } catch(e) { console.warn("price_cache_new load failed", e); }
 }
 
-async function saveLastKnownPrice(isin, price, source, userId) {
-  if(!isin) return;
-  _pricesCache[isin] = {price, source: source||"live", updated_at: new Date().toISOString()};
+async function saveLastKnownPrice(anagrafeId, cacheKey, price, source, userId) {
+  if(!anagrafeId || !price) return;
+  if(cacheKey) _pricesCache[cacheKey] = {price, source: source||"live", updated_at: new Date().toISOString()};
   try {
-    const anag = _anagList.find(a=>a.isin && a.isin===isin) || _anagList.find(a=>a.ticker && a.ticker===isin);
-    if(!anag?.id) return;
     const hdr = getHdr();
-    const body = JSON.stringify({
-        anagrafe_id: anag.id,
+    const r = await fetchWithTimeout(`${SB_URL}/rest/v1/price_cache_new?on_conflict=anagrafe_id`, {
+      method: "POST",
+      headers: {...hdr, "Prefer": "return=minimal,resolution=merge-duplicates"},
+      body: JSON.stringify({
+        anagrafe_id: anagrafeId,
         last_price: price,
         tipo: source||"live",
         updated_by: userId||_currentSession?.user?.id,
         updated_at: new Date().toISOString()
-      });
-    const r = await fetchWithTimeout(`${SB_URL}/rest/v1/price_cache_new?on_conflict=anagrafe_id`, {
-      method: "POST",
-      headers: {...hdr, "Content-Type":"application/json", "Prefer": "return=minimal,resolution=merge-duplicates"},
-      body
+      })
     });
-    if(!r.ok) {
-      const errText = await r.text();
-      console.error("price_cache_new failed:", r.status, errText);
-      alert("Errore salvataggio prezzo: " + r.status + " " + errText);
-    } else {
-      alert("Scritto! status: " + r.status);
-    }
+    if(!r.ok) console.error("price_cache_new failed:", r.status, await r.text());
   } catch(e) { console.warn("price_cache_new save failed", e); }
 }
 
@@ -914,8 +905,8 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
         var displayPrice=p.isBond?livePrice:livePrice; // bond price shown as % directly
 
         result.push(
-          <tr key={ac+i} style={{opacity:1,cursor:"pointer"}} onClick={function(e){if(editingIsin||e.defaultPrevented)return;onClickInst(p.instrument);}}>
-            <td onClick={function(e){if(isEditing)e.stopPropagation();}}>
+          <tr key={ac+i} style={{opacity:1,cursor:"pointer"}} onClick={function(e){if(e.target.closest&&e.target.closest('input,button'))return;if(editingIsin)return;onClickInst(p.instrument);}}>
+            <td>
               <div style={{display:"flex",alignItems:"center",gap:7}}>
                 <span style={{flexShrink:0,width:8,height:8,borderRadius:"50%",background:acColor(ac)}}/>
                 <div>
@@ -927,29 +918,35 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
                       title={stale?("Ultimo prezzo noto — "+(lkp?new Date(lkp.updated_at).toLocaleDateString("it-IT"):"")):"Inserisci prezzo manuale"}
                       style={{flexShrink:0,cursor:"pointer",fontSize:11,opacity:0.7}}
                       onClick={function(e){e.stopPropagation();setEditingIsin(cacheKey);setEditingVal(manualP?String(manualP.price):"");}}>✏️</span>}
-                    {isEditing&&<span onClick={function(e){e.stopPropagation();}} style={{display:"inline-flex",alignItems:"center",gap:4,flexShrink:0}}>
+                    {isEditing&&<span style={{display:"inline-flex",alignItems:"center",gap:4,flexShrink:0}}>
                       <input autoFocus type="number" inputMode="decimal" step="0.01" placeholder="es. 98.50"
-                        style={{width:88,fontSize:13,padding:"2px 5px",background:"var(--s2)",border:"1px solid var(--bl)",borderRadius:4,color:"#ffffff"}}
+                        style={{width:80,fontSize:13,padding:"2px 5px",background:"var(--s2)",border:"1px solid var(--bl)",borderRadius:4,color:"#ffffff"}}
                         value={editingVal}
-                        onClick={function(e){e.stopPropagation();}}
-                        onChange={function(e){e.stopPropagation();setEditingVal(e.target.value);}}
+                        onChange={function(e){setEditingVal(e.target.value);}}
                         onKeyDown={function(e){
-                          e.stopPropagation();
                           if(e.key==="Enter"){
-                            var v=parseFloat(e.target.value||editingVal);
-                            if(v>0){setManualBondPrices(function(prev){var n=Object.assign({},prev);n[cacheKey]={price:v,manual:true};return n;});saveLastKnownPrice(cacheKey,v,"manual",impUid||session?.user?.id);}
+                            var v=parseFloat(e.target.value.replace(",","."));
+                            if(v>0){
+                              setManualBondPrices(function(prev){var n=Object.assign({},prev);n[cacheKey]={price:v,manual:true};return n;});
+                              saveLastKnownPrice(p.id,cacheKey,v,"manual",impUid||session?.user?.id);
+                              onRefresh();
+                            }
                             setEditingIsin(null);
+                            setEditingVal("");
                           }
-                          if(e.key==="Escape"){setEditingIsin(null);}
-                        }}/>
-                      <span
-                        onClick={function(e){
-                          e.stopPropagation();
-                          var v=parseFloat(editingVal);
-                          if(v>0){setManualBondPrices(function(prev){var n=Object.assign({},prev);n[cacheKey]={price:v,manual:true};return n;});saveLastKnownPrice(cacheKey,v,"manual",impUid||session?.user?.id);}
-                          setEditingIsin(null);
+                          if(e.key==="Escape"){setEditingIsin(null);setEditingVal("");}
                         }}
-                        style={{fontSize:16,cursor:"pointer",padding:"0 4px",color:"var(--g)"}}>✓</span>
+                        onBlur={function(e){
+                          var v=parseFloat(e.target.value.replace(",","."));
+                          if(v>0){
+                            setManualBondPrices(function(prev){var n=Object.assign({},prev);n[cacheKey]={price:v,manual:true};return n;});
+                            saveLastKnownPrice(p.id,cacheKey,v,"manual",impUid||session?.user?.id);
+                            onRefresh();
+                          }
+                          setEditingIsin(null);
+                          setEditingVal("");
+                        }}/>
+                      <span style={{fontSize:12,color:"var(--m2)"}}>↵</span>
                     </span>}
                   </div>
 
@@ -2053,7 +2050,7 @@ function App() {
         if(d.price&&d.price>0) {
           results[p.ticker]={price:d.price,currency:"",change_pct:(d.change_pct!=null?d.change_pct:null)};
           const cacheKey = p.isin || p.ticker;
-          if(cacheKey) saveLastKnownPrice(cacheKey, d.price, "live", impUid||session?.user?.id);
+          saveLastKnownPrice(p.id, p.isin||p.ticker, d.price, "live", impUid||session?.user?.id);
         } else {
           const lkp = _pricesCache[p.isin||p.ticker] || _pricesCache[p.ticker] || null;
           if(lkp) results[p.ticker]={price:lkp.price,currency:"",change_pct:null,stale:true};
@@ -2076,7 +2073,7 @@ function App() {
         const d = await r.json();
         if(d.price&&d.price>0) {
           bondResults[p.isin]={price:d.price,change_pct:(d.change_pct!=null?d.change_pct:null)};
-          saveLastKnownPrice(p.isin, d.price, "live", impUid||session?.user?.id);
+          saveLastKnownPrice(p.id, p.isin, d.price, "live", impUid||session?.user?.id);
         } else {
           const lkp = _pricesCache[p.isin]||null;
           if(lkp) bondResults[p.isin]={price:lkp.price,change_pct:null,stale:true};

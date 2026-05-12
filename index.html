@@ -219,13 +219,15 @@ async function saveLastKnownPrice(isin, price, source, userId) {
       });
     const r = await fetchWithTimeout(`${SB_URL}/rest/v1/price_cache_new?on_conflict=anagrafe_id`, {
       method: "POST",
-      headers: {...hdr, "Content-Type":"application/json", "Prefer": "resolution=merge-duplicates"},
+      headers: {...hdr, "Content-Type":"application/json", "Prefer": "return=minimal,resolution=merge-duplicates"},
       body
     });
     if(!r.ok) {
       const errText = await r.text();
       console.error("price_cache_new failed:", r.status, errText);
       alert("Errore salvataggio prezzo: " + r.status + " " + errText);
+    } else {
+      alert("Scritto! status: " + r.status);
     }
   } catch(e) { console.warn("price_cache_new save failed", e); }
 }

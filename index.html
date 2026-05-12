@@ -52,6 +52,7 @@ document.addEventListener("visibilitychange", function() {
 const SB_URL = "https://csyyrbkbgyjyztkjtbrm.supabase.co";
 const SB_ANON = "sb_publishable_jRMF0ukDp5_IGoYkhjng3g_j5-C0_10";
 let _currentSession = null; // kept fresh by onAuthStateChange — never call getSession() in hot paths
+let _anagList = []; // {id, isin, ticker, asset, assetClass, prodotto}
 
 function getHdr() {
   // Uses cached session — never blocks on network
@@ -185,14 +186,20 @@ async function fetchWithTimeout(url, opts, ms=20000) {
 // In-memory cache for current session (loaded on startup)
 let _pricesCache = {}; // {isin: {price, source, updated_at}}
 
-async function loadPricesCache(userId) {
+async function loadPricesCache() {
   try {
     const hdr = getHdr();
-    const r = await fetchWithTimeout(`${SB_URL}/rest/v1/prices_cache?user_id=eq.${userId}&select=isin,price,source,updated_at`, {headers: hdr});
+    // Legge price_cache_new joinando anagrafe per avere l'isin
+    const r = await fetchWithTimeout(`${SB_URL}/rest/v1/price_cache_new?select=anagrafe_id,last_price,tipo,updated_at,anagrafe(isin)`, {headers: hdr});
     if(!r.ok) return;
     const rows = await r.json();
     _pricesCache = {};
-    (rows||[]).forEach(row => { _pricesCache[row.isin] = {price: Number(row.price), source: row.source, updated_at: row.updated_at}; });
+    (rows||[]).forEach(row => {
+      const isin = row.anagrafe?.isin;
+      if(isin && row.last_price!=null) {
+        _pricesCache[isin] = {price: Number(row.last_price), source: row.tipo||"live", updated_at: row.updated_at};
+      }
+    });
   } catch(e) { console.warn("prices_cache load failed", e); }
 }
 
@@ -200,13 +207,23 @@ async function saveLastKnownPrice(isin, price, source, userId) {
   if(!isin) return;
   _pricesCache[isin] = {price, source: source||"live", updated_at: new Date().toISOString()};
   try {
+    // Trova anagrafe_id dall'isin
+    const anag = Object.values(_anagCache||{}).find(a=>a.isin===isin) || _anagList?.find(a=>a.isin===isin);
+    if(!anag?.id) return;
     const hdr = getHdr();
-    await fetchWithTimeout(`${SB_URL}/rest/v1/prices_cache?on_conflict=user_id,isin`, {
+    const row = {
+      anagrafe_id: anag.id,
+      last_price: price,
+      tipo: source||"live",
+      updated_by: userId||_currentSession?.user?.id,
+      updated_at: new Date().toISOString()
+    };
+    await fetchWithTimeout(`${SB_URL}/rest/v1/price_cache_new?on_conflict=anagrafe_id`, {
       method: "POST",
       headers: {...hdr, "Prefer": "return=minimal,resolution=merge-duplicates"},
-      body: JSON.stringify({isin, price, source: source||"live", updated_at: new Date().toISOString(), user_id: userId||_currentSession?.user?.id})
+      body: JSON.stringify(row)
     });
-  } catch(e) { console.warn("prices_cache save failed", e); }
+  } catch(e) { console.warn("price_cache_new save failed", e); }
 }
 
 async function sbLoad(table, impersonateUid) {
@@ -1440,7 +1457,7 @@ function App() {
       setSyncStatus("loading");
       // Load prices cache for this user
       const effectiveUid2 = uid || session?.user?.id || _currentSession?.user?.id;
-      if(effectiveUid2) { await loadPricesCache(effectiveUid2); setPricesCacheVer(v=>v+1); }
+      if(effectiveUid2) { await loadPricesCache(); setPricesCacheVer(v=>v+1); }
       let tRows, sRows, aRows;
       if(uid) {
         const [result, anagRes] = await Promise.all([
@@ -1458,10 +1475,12 @@ function App() {
         ]);
       }
       const anagList = aRows.map(rowToAnagrafe);
+      _anagList = anagList;
       const anagMap = Object.fromEntries(anagList.map(a=>[a.id,a]));
       setAnagrafe(anagList);
       setTxs(tRows.map(r=>rowToTx(r,anagMap)));
       setSnaps(sRows.map(rowToSnap));
+      await loadPricesCache();
       setReady(true);
       setLoading(false);
       setSyncStatus("");

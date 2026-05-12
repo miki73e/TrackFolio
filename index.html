@@ -1995,6 +1995,7 @@ function App() {
         const soloMeseCorrente = impattati.every(s=>s.date.slice(0,7)===thisMonth);
         if(soloMeseCorrente) {
           fetchLivePrices(livePositions, bondPositions);
+          setAutoSnapDone(false);
         } else {
           setSnapImpactWarning({snaps: impattati});
         }
@@ -3400,14 +3401,15 @@ function App() {
               <input list="il-name" className={ferr.instrument?"err":""} value={form.instrument}
                 onChange={e=>{
                   const val=e.target.value;
-                  const anag=instList.find(a=>a.asset===val);
-                  if(anag) setForm(p=>({...p,instrument:anag.asset,assetClass:anag.assetClass,prodotto:anag.prodotto||"",isin:anag.isin||"",ticker:anag.ticker||"",anagrafeId:anag.id}));
+                  const anag=instList.find(a=>a.asset===val||a.asset.trim()===val.trim());
+                  if(anag) { setForm(p=>({...p,instrument:anag.asset,assetClass:anag.assetClass,prodotto:anag.prodotto||"",isin:anag.isin||"",ticker:anag.ticker||"",anagrafeId:anag.id})); setFerr(f=>({...f,instrument:undefined})); }
                   else setForm(p=>({...p,instrument:val,anagrafeId:null}));
                 }}
                 onBlur={e=>{
                   const val=e.target.value.trim();
-                  if(val&&!instList.find(a=>a.asset===val))
-                    setFerr(f=>({...f,instrument:"Titolo non censito — contatta l'admin"}));
+                  const found=instList.find(a=>a.asset.trim()===val);
+                  if(found){ setForm(p=>({...p,instrument:found.asset,assetClass:found.assetClass,prodotto:found.prodotto||"",isin:found.isin||"",ticker:found.ticker||"",anagrafeId:found.id})); setFerr(f=>({...f,instrument:undefined})); }
+                  else if(val) setFerr(f=>({...f,instrument:"Titolo non censito — contatta l'admin"}));
                 }}
                 onFocus={()=>setFerr(f=>({...f,instrument:undefined}))}
                 placeholder=""/>

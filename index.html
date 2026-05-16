@@ -848,13 +848,15 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
       if(manualP){ rawPrice=manualP.price; }
       else if(bp&&bp.price>0){ rawPrice=bp.price; if(bp.stale) stale=true; }
       else if(lkp){ rawPrice=lkp.price; stale=true; }
-      changePct=bp&&bp.change_pct!=null?bp.change_pct:null;
+      if(manualP) changePct=manualP.change_pct!=null?manualP.change_pct:null;
+      else changePct=bp&&bp.change_pct!=null?bp.change_pct:null;
     } else {
       var lp=livePrices[p.ticker];
       if(manualP){ rawPrice=manualP.price; }
       else if(lp&&lp.price){ rawPrice=lp.price; if(lp.stale) stale=true; }
       else if(lkp){ rawPrice=lkp.price; stale=true; }
-      changePct=lp&&lp.change_pct!=null?lp.change_pct:null;
+      if(manualP) changePct=manualP.change_pct!=null?manualP.change_pct:null;
+      else changePct=lp&&lp.change_pct!=null?lp.change_pct:null;
     }
     var ctv=rawPrice!=null?rawPrice*p.qty:null;
     return {rawPrice, ctv, changePct, stale, isBond};
@@ -944,11 +946,13 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
         if(p.isBond){
           var bp=effectiveBondPrices[cacheKey];
           rawPrice=manualP?manualP.price:(bp&&bp.price>0?bp.price:(_pricesCache[cacheKey]?_pricesCache[cacheKey].price:null));
-          changePct=bp&&bp.change_pct!=null?bp.change_pct:null;
+          if(manualP) changePct=manualP.change_pct!=null?manualP.change_pct:null;
+          else changePct=bp&&bp.change_pct!=null?bp.change_pct:null;
         } else {
           var lp=livePrices[p.ticker];
           rawPrice=manualP?manualP.price:(lp&&lp.price?lp.price:null);
-          changePct=lp&&lp.change_pct!=null?lp.change_pct:null;
+          if(manualP) changePct=manualP.change_pct!=null?manualP.change_pct:null;
+          else changePct=lp&&lp.change_pct!=null?lp.change_pct:null;
         }
         var ctv=rawPrice!=null?rawPrice*p.qty:null;
         totInvAC+=p.cost;
@@ -971,13 +975,15 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
           if(manualP){ rawPrice=manualP.price; }
           else if(bp&&bp.price>0){ rawPrice=bp.price; if(bp.stale) stale=true; }
           else if(lkp){ rawPrice=lkp.price; stale=true; }
-          changePct=bp&&bp.change_pct!=null?bp.change_pct:null;
+          if(manualP) changePct=manualP.change_pct!=null?manualP.change_pct:null;
+          else changePct=bp&&bp.change_pct!=null?bp.change_pct:null;
         } else {
           var lp=livePrices[p.ticker];
           if(manualP){ rawPrice=manualP.price; }
           else if(lp&&lp.price){ rawPrice=lp.price; if(lp.stale) stale=true; }
           else if(lkp){ rawPrice=lkp.price; stale=true; }
-          changePct=lp&&lp.change_pct!=null?lp.change_pct:null;
+          if(manualP) changePct=manualP.change_pct!=null?manualP.change_pct:null;
+          else changePct=lp&&lp.change_pct!=null?lp.change_pct:null;
         }
 
         var livePrice=rawPrice;
@@ -1012,7 +1018,7 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
           <div key={ac+i} className="hcard">
             <span className="hdot" style={{background:acColor(ac)}}/>
             <div className="hname" style={{color:grey?"#94a3b8":"var(--t)"}}>
-              {p.instrument}
+              <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}}>{p.instrument}</span>
               {(noPrice||stale||manualP)&&<span className="editp"
                 title={stale?("Ultimo prezzo noto — "+(lkp?new Date(lkp.updated_at).toLocaleDateString("it-IT"):"")):"Inserisci prezzo manuale"}
                 style={{flexShrink:0,cursor:"pointer",fontSize:11,opacity:0.7}}
@@ -1329,7 +1335,9 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
               var aid=manualPriceModal.anagrafeId;
               var ck=manualPriceModal.cacheKey;
               try {
-                setManualBondPrices(function(prev){var n=Object.assign({},prev);n[ck]={price:v,manual:true};return n;});
+                var oldPrice = (_pricesCache[ck] && _pricesCache[ck].price>0) ? _pricesCache[ck].price : null;
+                var newChangePct = (oldPrice!=null) ? Math.round(((v-oldPrice)/oldPrice)*10000)/100 : null;
+                setManualBondPrices(function(prev){var n=Object.assign({},prev);n[ck]={price:v,change_pct:newChangePct,manual:true};return n;});
                 saveLastKnownPrice(aid,ck,v,"manual",userId);
                 onRefresh();
                 setTimeout(function(){
@@ -2541,10 +2549,7 @@ function App() {
             TrackFolio
           </div>
           <div style={{fontSize:16,color:"var(--m2)",fontFamily:"var(--sans)",lineHeight:1.6}}>
-            Track your portfolio, take a snapshot anytime:
-          </div>
-          <div style={{fontSize:16,color:"var(--m2)",fontFamily:"var(--sans)",lineHeight:1.6,marginTop:6}}>
-            il modo semplice per tenere sotto controllo il tuo portafoglio
+            Track your portfolio, il modo semplice per tenere sotto controllo il tuo portafoglio
           </div>
         </div>
 
@@ -3554,7 +3559,7 @@ function App() {
       const closeAll = ()=>{ setCedoleModal(false); setActiveCedMi(null); setActiveCedInst(null); setCedExpanded(null); if(plDetailReturn){setPlDetailReturn(false);setPlDetailModal(true);} };
       // ── AGGREGATIONS ──
       const isAll = period==="ALL";
-      // Totals (always shown in top box, filtered by activeCedInst if set)
+      // Totals (always shown in top box, filtered by activeCedInst if set, and by activeCedMi if set in non-ALL view)
       let totIncome=0, totTax=0;
       if(isAll){
         Object.keys(cedByYear).forEach(yr=>{
@@ -3570,12 +3575,25 @@ function App() {
         }
       } else {
         Object.keys(cedByMonth).forEach(mi=>{
+          // se è selezionato un mese, considero solo quello
+          if(activeCedMi!=null && parseInt(mi)!==activeCedMi) return;
           const mm=cedByMonth[mi]||{};
           Object.keys(mm).forEach(inst=>{ if(!activeCedInst||inst===activeCedInst) totIncome+=mm[inst]||0; });
           if(!activeCedInst) totTax += taxCedByMonth[mi]||0;
         });
         if(activeCedInst){
-          totTax = txs.filter(t=>t.type==="INCOME"&&t.instrument===activeCedInst&&t.date>=periodRange.from&&t.date<=periodRange.to).reduce((s,t)=>s+(t.tax||0),0);
+          totTax = txs.filter(t=>{
+            if(t.type!=="INCOME"||t.instrument!==activeCedInst) return false;
+            if(t.date<periodRange.from||t.date>periodRange.to) return false;
+            if(activeCedMi!=null){
+              const m = parseInt(t.date.slice(5,7))-1;
+              if(m!==activeCedMi) return false;
+            }
+            return true;
+          }).reduce((s,t)=>s+(t.tax||0),0);
+        } else if(activeCedMi!=null){
+          // no instrument filter, but month filter active → restrict tax to that month
+          totTax = taxCedByMonth[activeCedMi]||0;
         }
       }
       const totNet = totIncome - totTax;

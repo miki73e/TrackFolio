@@ -2427,8 +2427,8 @@ function App() {
               <div style={{display:"flex",gap:0,borderRadius:6,overflow:"hidden",border:"1px solid var(--b)"}}>
                 {["login","signup"].map(m=>(
                   <button key={m} onClick={()=>{setAuthMode(m);setAuthErr("");}}
-                    style={{flex:1,padding:"8px",fontSize:12,fontFamily:"var(--sans)",fontWeight:600,cursor:"pointer",
-                      border:"none",background:authMode===m?"var(--bl)":"var(--s2)",color:authMode===m?"#fff":"var(--m)"}}>
+                    style={{flex:1,padding:"8px",fontSize:13,fontFamily:"var(--sans)",fontWeight:700,cursor:"pointer",
+                      border:"none",background:authMode===m?"var(--bl)":"var(--s2)",color:authMode===m?"#fff":"var(--t)"}}>
                     {m==="login"?"Accedi":"Registrati"}
                   </button>
                 ))}
@@ -2465,14 +2465,14 @@ function App() {
                     padding:"10px 12px",color:"var(--t)",fontFamily:"var(--mono)",fontSize:14,outline:"none",
                     width:"100%",boxSizing:"border-box"}}/>
               </>}
-              {authErr&&<div style={{color:(!authErr.includes("prima")&&(authErr.includes("email")||authErr.includes("registr")||authErr.includes("inviata")||authErr.includes("reset")))?"var(--g)":"var(--r)",fontSize:11,fontFamily:"var(--mono)",textAlign:"center"}}>{authErr}</div>}
+              {authErr&&<div style={{color:(!authErr.includes("prima")&&(authErr.includes("email")||authErr.includes("registr")||authErr.includes("inviata")||authErr.includes("reset")))?"var(--g)":"var(--r)",fontSize:13,fontFamily:"var(--mono)",textAlign:"center"}}>{authErr}</div>}
               <button onClick={authMode==="login"?doLogin:doSignup} disabled={authLoading}
                 style={{background:"var(--bl)",color:"#fff",border:"none",borderRadius:6,
-                  padding:"10px",fontFamily:"var(--sans)",fontSize:13,fontWeight:600,cursor:"pointer",opacity:authLoading?0.6:1}}>
+                  padding:"10px",fontFamily:"var(--sans)",fontSize:13,fontWeight:700,cursor:"pointer",opacity:authLoading?0.6:1}}>
                 {authLoading?"...":(authMode==="login"?"Accedi":"Registrati")}
               </button>
               {authMode==="login"&&<div style={{textAlign:"center"}}>
-                <span style={{fontSize:11,color:"var(--m)",cursor:"pointer",textDecoration:"underline"}}
+                <span style={{fontSize:13,color:"var(--m)",cursor:"pointer",textDecoration:"underline"}}
                   onClick={async()=>{
                     if(!authEmail.trim()){setAuthErr("Inserisci la tua email prima");return;}
                     const {error}=await _sb.auth.resetPasswordForEmail(authEmail.trim(),{redirectTo:"https://trackfolioweb.netlify.app/reset-password.html"});
@@ -2481,7 +2481,7 @@ function App() {
                   }}>
                   Password dimenticata?
                 </span>
-                <div style={{marginTop:10,fontSize:11,color:"var(--m)"}}>
+                <div style={{marginTop:10,fontSize:13,color:"var(--m)"}}>
                   Contact: <a href="mailto:trackfolio@yahoo.com" style={{color:"var(--bl)",textDecoration:"none"}}>trackfolio@yahoo.com</a>
                 </div>
               </div>}
@@ -2529,7 +2529,7 @@ function App() {
           ].map((t,i)=>(
             <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:10}}>
               <span style={{color:"var(--bl)",fontSize:14,marginTop:2}}>✓</span>
-              <span style={{fontSize:14,color:"var(--m2)"}}>{t}</span>
+              <span style={{fontSize:14,color:"var(--m)"}}>{t}</span>
             </div>
           ))}
         </div>
@@ -2569,57 +2569,57 @@ function App() {
           <div style={{fontSize:10,color:"var(--m2)",textTransform:"uppercase",letterSpacing:".1em",
             marginBottom:24,fontFamily:"var(--mono)"}}>FAQ</div>
           <div style={{borderBottom:"1px solid var(--b)",paddingBottom:16,marginBottom:16}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>Perché non trovo un titolo da aggiungere?</div>
-            <div style={{fontSize:12,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>L&apos;app non utilizza database finanziari globali ma un database proprietario. Se un titolo non è presente, puoi contattare l&apos;amministratore fornendo l&apos;ISIN per richiederne l&apos;inserimento.</div>
+            <div style={{fontSize:14,fontWeight:700,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>Perché non trovo un titolo da aggiungere?</div>
+            <div style={{fontSize:14,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>L&apos;app non utilizza database finanziari globali ma un database proprietario. Se un titolo non è presente, puoi contattare l&apos;amministratore fornendo l&apos;ISIN per richiederne l&apos;inserimento.</div>
           </div>
           <div style={{borderBottom:"1px solid var(--b)",paddingBottom:16,marginBottom:16}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>Posso inserire dati storici?</div>
-            <div style={{fontSize:12,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>Sì, puoi registrare transazioni con qualsiasi data passata. Per i periodi storici, il sistema suggerisce il valore di carico risultante dalle tue transazioni come punto di partenza — puoi accettarlo o modificarlo manualmente.</div>
+            <div style={{fontSize:14,fontWeight:700,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>Posso inserire dati storici?</div>
+            <div style={{fontSize:14,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>Sì, puoi registrare transazioni con qualsiasi data passata. Per i periodi storici, il sistema suggerisce il valore di carico risultante dalle tue transazioni come punto di partenza — puoi accettarlo o modificarlo manualmente.</div>
           </div>
 
           <div style={{borderBottom:"1px solid var(--b)",paddingBottom:16,marginBottom:16}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>I titoli in valuta estera come vengono gestiti?</div>
-            <div style={{fontSize:12,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>I titoli denominati in valuta diversa dall&apos;euro vengono convertiti automaticamente in euro. Il controvalore mostrato è quindi sempre espresso in EUR.</div>
+            <div style={{fontSize:14,fontWeight:700,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>I titoli in valuta estera come vengono gestiti?</div>
+            <div style={{fontSize:14,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>I titoli denominati in valuta diversa dall&apos;euro vengono convertiti automaticamente in euro. Il controvalore mostrato è quindi sempre espresso in EUR.</div>
           </div>
           <div style={{borderBottom:"1px solid var(--b)",paddingBottom:16,marginBottom:16}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>I prezzi sono in tempo reale?</div>
-            <div style={{fontSize:12,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>No. L&apos;app non è progettata per il monitoraggio in tempo reale. A seconda della fonte dati, i prezzi possono essere in ritardo o aggiornati a fine giornata del giorno precedente. Nell&apos;app l&apos;aggiornamento avviene ogni 15 minuti.</div>
+            <div style={{fontSize:14,fontWeight:700,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>I prezzi sono in tempo reale?</div>
+            <div style={{fontSize:14,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>No. L&apos;app non è progettata per il monitoraggio in tempo reale. A seconda della fonte dati, i prezzi possono essere in ritardo o aggiornati a fine giornata del giorno precedente. Nell&apos;app l&apos;aggiornamento avviene ogni 15 minuti.</div>
           </div>
           <div style={{borderBottom:"1px solid var(--b)",paddingBottom:16,marginBottom:16}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>Perché il controvalore non è preciso al centesimo?</div>
-            <div style={{fontSize:12,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>Piccole differenze possono derivare da arrotondamenti, ritardi nei prezzi o modifiche manuali.</div>
+            <div style={{fontSize:14,fontWeight:700,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>Perché il controvalore non è preciso al centesimo?</div>
+            <div style={{fontSize:14,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>Piccole differenze possono derivare da arrotondamenti, ritardi nei prezzi o modifiche manuali.</div>
           </div>
           <div style={{borderBottom:"1px solid var(--b)",paddingBottom:16,marginBottom:16}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>Posso modificare o cancellare una transazione?</div>
-            <div style={{fontSize:12,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>Sì, tutte le transazioni possono essere modificate o eliminate in qualsiasi momento.</div>
+            <div style={{fontSize:14,fontWeight:700,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>Posso modificare o cancellare una transazione?</div>
+            <div style={{fontSize:14,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>Sì, tutte le transazioni possono essere modificate o eliminate in qualsiasi momento.</div>
           </div>
           <div style={{borderBottom:"1px solid var(--b)",paddingBottom:16,marginBottom:16}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>I miei dati sono sicuri?</div>
-            <div style={{fontSize:12,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>I dati sono salvati in modo sicuro e accessibili solo dal tuo account.</div>
+            <div style={{fontSize:14,fontWeight:700,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>I miei dati sono sicuri?</div>
+            <div style={{fontSize:14,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>I dati sono salvati in modo sicuro e accessibili solo dal tuo account.</div>
           </div>
           <div style={{borderBottom:"1px solid var(--b)",paddingBottom:16,marginBottom:16}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>Cosa succede se un prezzo non viene trovato?</div>
-            <div style={{fontSize:12,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>Viene considerato l&apos;ultimo prezzo noto, in alternativa il prezzo di carico. In ogni caso puoi sempre modificarlo manualmente.</div>
+            <div style={{fontSize:14,fontWeight:700,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>Cosa succede se un prezzo non viene trovato?</div>
+            <div style={{fontSize:14,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>Viene considerato l&apos;ultimo prezzo noto, in alternativa il prezzo di carico. In ogni caso puoi sempre modificarlo manualmente.</div>
           </div>
           <div style={{borderBottom:"1px solid var(--b)",paddingBottom:16,marginBottom:16}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>Il sistema tiene traccia anche dei costi?</div>
-            <div style={{fontSize:12,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>Sì. Puoi inserire tasse e commissioni: non è necessario usare il segno negativo, il sistema li considera automaticamente come importi da sottrarre al rendimento.</div>
+            <div style={{fontSize:14,fontWeight:700,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>Il sistema tiene traccia anche dei costi?</div>
+            <div style={{fontSize:14,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>Sì. Puoi inserire tasse e commissioni: non è necessario usare il segno negativo, il sistema li considera automaticamente come importi da sottrarre al rendimento.</div>
           </div>
           <div style={{borderBottom:"1px solid var(--b)",paddingBottom:16,marginBottom:16}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>Posso gestire i ratei cedola?</div>
-            <div style={{fontSize:12,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>Sì. Puoi inserire il rateo cedola maturato quando vendi e quello pagato quando acquisti. Nel caso di acquisto ricordati di inserire gli importi con segno negativo.</div>
+            <div style={{fontSize:14,fontWeight:700,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>Posso gestire i ratei cedola?</div>
+            <div style={{fontSize:14,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>Sì. Puoi inserire il rateo cedola maturato quando vendi e quello pagato quando acquisti. Nel caso di acquisto ricordati di inserire gli importi con segno negativo.</div>
           </div>
           <div style={{borderBottom:"1px solid var(--b)",paddingBottom:16,marginBottom:16}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>Posso esportare i miei dati?</div>
-            <div style={{fontSize:12,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>Sì, puoi esportare i tuoi dati in formato CSV.</div>
+            <div style={{fontSize:14,fontWeight:700,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>Posso esportare i miei dati?</div>
+            <div style={{fontSize:14,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>Sì, puoi esportare i tuoi dati in formato CSV.</div>
           </div>
           <div style={{borderBottom:"1px solid var(--b)",paddingBottom:16,marginBottom:16}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>Posso usare l&apos;app su più dispositivi?</div>
-            <div style={{fontSize:12,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>Sì, accedendo con lo stesso account ritroverai i tuoi dati sincronizzati.</div>
+            <div style={{fontSize:14,fontWeight:700,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>Posso usare l&apos;app su più dispositivi?</div>
+            <div style={{fontSize:14,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>Sì, accedendo con lo stesso account ritroverai i tuoi dati sincronizzati.</div>
           </div>
           <div style={{borderBottom:"1px solid var(--b)",paddingBottom:16,marginBottom:16}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>L&apos;app può essere usata per decisioni di investimento?</div>
-            <div style={{fontSize:12,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>No, l&apos;app è solo uno strumento di monitoraggio e non fornisce consulenza finanziaria.</div>
+            <div style={{fontSize:14,fontWeight:700,color:"var(--t)",marginBottom:6,fontFamily:"var(--sans)"}}>L&apos;app può essere usata per decisioni di investimento?</div>
+            <div style={{fontSize:14,color:"var(--m)",lineHeight:1.7,fontFamily:"var(--sans)"}}>No, l&apos;app è solo uno strumento di monitoraggio e non fornisce consulenza finanziaria.</div>
           </div>
         </div>
       </div>
@@ -2678,11 +2678,11 @@ function App() {
           onClick={()=>{ setSkipWelcome(true); setTab("transazioni"); setModal("new"); setForm({...EMPTY}); setFerr({}); }}>
           → Inserisci la prima transazione
         </button>
-        <div style={{marginTop:24,fontSize:11,color:"var(--m)"}}>
+        <div style={{marginTop:24,fontSize:13,color:"var(--m)"}}>
           Hai già dati? Inserisci tutte le transazioni storiche, poi potrai costruire le performance nel tempo.
         </div>
         <div style={{marginTop:32,borderTop:"1px solid var(--b)",paddingTop:20}}>
-          <button className="nb" style={{fontSize:11,color:"var(--m)",background:"none",border:"none",
+          <button className="nb" style={{fontSize:13,color:"var(--m)",background:"none",border:"none",
             cursor:"pointer",textDecoration:"underline"}}
             onClick={doLogout}>Esci</button>
         </div>
@@ -2800,14 +2800,14 @@ function App() {
           padding:"14px 18px",marginBottom:14,display:"flex",justifyContent:"space-between",
           alignItems:"center",gap:12,flexWrap:"wrap"}}>
           <div>
-            <div style={{fontWeight:700,color:"var(--bl)",marginBottom:4,fontSize:13}}>
+            <div style={{fontWeight:700,color:"var(--bl)",marginBottom:4,fontSize:14}}>
               📍 Snapshot iniziale mancante
             </div>
-            <div style={{fontSize:12,color:"var(--m)",lineHeight:1.5}}>
+            <div style={{fontSize:14,color:"var(--m)",lineHeight:1.5,fontFamily:"var(--sans)"}}>
               Senza snapshot i KPI non sono calcolabili. Vai su Snapshot per crearlo — puoi usare il calcolo automatico sull'investito oppure inserire il valore reale di mercato.
             </div>
           </div>
-          <button className="btn bp" style={{whiteSpace:"nowrap",flexShrink:0,fontSize:12,padding:"8px 16px"}}
+          <button className="btn bp" style={{whiteSpace:"nowrap",flexShrink:0}}
             onClick={()=>setTab("snapshot")}>
             Vai a Snapshot →
           </button>
@@ -2946,13 +2946,13 @@ function App() {
         <div style={{background:"rgba(245,158,11,0.1)",border:"1px solid var(--y)",borderRadius:9,
           padding:"12px 16px",marginBottom:11,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
           <div>
-            <div style={{fontSize:12,fontWeight:600,color:"var(--y)",marginBottom:3}}>📍 Snapshot iniziale mancante</div>
-            <div style={{fontSize:11,color:"var(--m)"}}>
+            <div style={{fontSize:14,fontWeight:700,color:"var(--y)",marginBottom:3}}>📍 Snapshot iniziale mancante</div>
+            <div style={{fontSize:14,color:"var(--m)",lineHeight:1.5,fontFamily:"var(--sans)"}}>
               Nessuno snapshot trovato prima della prima transazione ({firstTxDate}).
-              Valore calcolato sull'investito: <span style={{color:"var(--t)",fontFamily:"var(--mono)"}}>{fN(initialSnapValue)}</span>
+              Valore calcolato sull'investito: <span style={{color:"var(--t)",fontFamily:"var(--mono)",fontWeight:700}}>{fN(initialSnapValue)}</span>
             </div>
           </div>
-          <button className="btn bp" style={{fontSize:11,padding:"7px 14px",whiteSpace:"nowrap"}}
+          <button className="btn bp" style={{whiteSpace:"nowrap"}}
             onClick={async()=>{
               setSyncStatus("saving");
               try {
@@ -3265,11 +3265,11 @@ function App() {
             <div className="mtitle">Portafoglio aggiornato</div>
             <button className="mx" onClick={()=>setAutoSnapNotice(false)}>✕</button>
           </div>
-          <div style={{fontSize:13,color:"var(--m)",lineHeight:1.7,padding:"8px 0 16px"}}>
+          <div style={{fontSize:14,color:"var(--m)",lineHeight:1.7,padding:"8px 0 16px",fontFamily:"var(--sans)"}}>
             Il controvalore è stato aggiornato con i prezzi rilevati. Puoi sempre modificare il valore in Snapshot, oppure verificare che siano stati catturati tutti i prezzi nel menù Holdings — anche in questo caso puoi intervenire manualmente per eventuali prezzi non trovati.
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:"var(--m)",cursor:"pointer"}}>
+            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"var(--t)",cursor:"pointer"}}>
               <input type="checkbox" onChange={e=>{
                 if(e.target.checked) localStorage.setItem("tf_autosnap_dismissed","1");
                 else localStorage.removeItem("tf_autosnap_dismissed");
@@ -3289,11 +3289,11 @@ function App() {
             <div className="mtitle">Snapshot non aggiornato</div>
             <button className="mx" onClick={()=>setSnapNotice(false)}>✕</button>
           </div>
-          <div style={{fontSize:13,color:"var(--m)",lineHeight:1.6,padding:"8px 0 16px"}}>
+          <div style={{fontSize:14,color:"var(--m)",lineHeight:1.6,padding:"8px 0 16px",fontFamily:"var(--sans)"}}>
             Transazione salvata. Gli snapshot esistenti non sono stati modificati — aggiornali manualmente nel tab Snapshot se necessario.
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:"var(--m)",cursor:"pointer"}}>
+            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"var(--t)",cursor:"pointer"}}>
               <input type="checkbox" onChange={e=>{
                 if(e.target.checked) localStorage.setItem("tf_snap_notice_dismissed","1");
                 else localStorage.removeItem("tf_snap_notice_dismissed");
@@ -3365,22 +3365,24 @@ function App() {
                       {/* R1: data SX | nome asset (col 2) | P/L importo (col 3) */}
                       <div style={{gridRow:1,gridColumn:1,fontFamily:"var(--mono)",fontWeight:700,fontSize:15,color:"var(--t)",whiteSpace:"nowrap"}}>{fD(s.date)}</div>
                       <div style={{gridRow:1,gridColumn:2,fontWeight:700,fontSize:15,color:"var(--t)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.instrument}</div>
-                      <div style={{gridRow:1,gridColumn:3,fontFamily:"var(--mono)",fontSize:13,fontWeight:700,textAlign:"right",fontVariantNumeric:"tabular-nums"}} className={sgn(s.pl)}>{fN(s.pl)}</div>
-                      {/* R2: Inv qty @ pmc = tot (subline) */}
-                      <div style={{gridRow:2,gridColumn:"1 / span 3",fontFamily:"var(--mono)",fontSize:12,color:"var(--m)",fontVariantNumeric:"tabular-nums"}}>
+                      <div style={{gridRow:1,gridColumn:3,fontFamily:"var(--mono)",fontSize:14,fontWeight:700,textAlign:"right",fontVariantNumeric:"tabular-nums"}} className={sgn(s.pl)}>{fN(s.pl)}</div>
+                      {/* R2: vuoto | Inv subline (col 2-3) */}
+                      <div style={{gridRow:2,gridColumn:"2 / span 2",fontFamily:"var(--mono)",fontSize:12,color:"var(--m)",fontVariantNumeric:"tabular-nums"}}>
                         Inv {fN(s.qty,s.qty%1===0?0:2)} @ {fN(s.pmc,2)} = {fN(buyTot)}
                       </div>
-                      {/* R3: Sell qty @ price = tot (subline) */}
-                      <div style={{gridRow:3,gridColumn:"1 / span 3",fontFamily:"var(--mono)",fontSize:12,color:"var(--m)",fontVariantNumeric:"tabular-nums"}}>
+                      {/* R3: vuoto | Sell subline (col 2-3) */}
+                      <div style={{gridRow:3,gridColumn:"2 / span 2",fontFamily:"var(--mono)",fontSize:12,color:"var(--m)",fontVariantNumeric:"tabular-nums"}}>
                         Sell {fN(s.qty,s.qty%1===0?0:2)} @ {fN(s.price||0,2)} = {fN(sellTot)}
                       </div>
-                      {/* R4: Tax | importo */}
-                      <div style={{gridRow:4,gridColumn:1,fontFamily:"var(--mono)",fontSize:13,fontWeight:700,color:"var(--t)",marginTop:6}}>Tax</div>
-                      <div style={{gridRow:4,gridColumn:3,fontFamily:"var(--mono)",fontSize:13,fontWeight:700,textAlign:"right",fontVariantNumeric:"tabular-nums",color:"var(--r)",marginTop:6}}>{fN(taxFees)}</div>
-                      {/* R5: Net | % | importo */}
-                      <div style={{gridRow:5,gridColumn:1,fontFamily:"var(--mono)",fontSize:14,fontWeight:700,color:"var(--t)",borderTop:"1px solid var(--b)",paddingTop:6}}>Net</div>
-                      <div style={{gridRow:5,gridColumn:2,fontFamily:"var(--mono)",fontSize:14,fontWeight:700,textAlign:"right",fontVariantNumeric:"tabular-nums",borderTop:"1px solid var(--b)",paddingTop:6}} className={sgn(s.pct)}>{s.pct!=null?fP(s.pct,2):"—"}</div>
-                      <div style={{gridRow:5,gridColumn:3,fontFamily:"var(--mono)",fontSize:14,fontWeight:700,textAlign:"right",fontVariantNumeric:"tabular-nums",borderTop:"1px solid var(--b)",paddingTop:6}} className={sgn(s.net)}>{fN(s.net)}</div>
+                      {/* R4: vuoto | Tax label (col 2) | importo (col 3) */}
+                      <div style={{gridRow:4,gridColumn:2,fontFamily:"var(--mono)",fontSize:14,fontWeight:700,color:"var(--t)",marginTop:6}}>Tax</div>
+                      <div style={{gridRow:4,gridColumn:3,fontFamily:"var(--mono)",fontSize:14,fontWeight:700,textAlign:"right",fontVariantNumeric:"tabular-nums",color:"var(--r)",marginTop:6}}>{fN(taxFees)}</div>
+                      {/* R5: vuoto | Net label + % (col 2) | importo (col 3) */}
+                      <div style={{gridRow:5,gridColumn:2,fontFamily:"var(--mono)",fontSize:15,fontWeight:700,color:"var(--t)",borderTop:"1px solid var(--b)",paddingTop:6,display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10}}>
+                        <span>Net</span>
+                        <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,fontVariantNumeric:"tabular-nums"}} className={sgn(s.pct)}>{s.pct!=null?fP(s.pct,2):"—"}</span>
+                      </div>
+                      <div style={{gridRow:5,gridColumn:3,fontFamily:"var(--mono)",fontSize:15,fontWeight:700,textAlign:"right",fontVariantNumeric:"tabular-nums",borderTop:"1px solid var(--b)",paddingTop:6}} className={sgn(s.net)}>{fN(s.net)}</div>
                     </div>
                   );
                 })}

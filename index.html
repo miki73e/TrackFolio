@@ -198,7 +198,7 @@ let _anagList = []; // popolato da loadData
 async function loadPricesCache() {
   try {
     const hdr = getHdr();
-    const r = await fetchWithTimeout(`${SB_URL}/rest/v1/price_cache_new?select=anagrafe_id,last_price,tipo,updated_at`, {headers: hdr});
+    const r = await fetchWithTimeout(`${SB_URL}/rest/v1/price_cache_new?select=anagrafe_id,last_price,tipo,updated_at,change_pct`, {headers: hdr});
     if(!r.ok) return;
     const rows = await r.json();
     _pricesCache = {};
@@ -206,15 +206,15 @@ async function loadPricesCache() {
       const anag = _anagList.find(a=>a.id===row.anagrafe_id);
       if(anag && row.last_price!=null) {
         const key = anag.isin || anag.ticker;
-        if(key) _pricesCache[key] = {price: Number(row.last_price), source: row.tipo||"live", updated_at: row.updated_at, anagrafe_id: row.anagrafe_id};
+        if(key) _pricesCache[key] = {price: Number(row.last_price), source: row.tipo||"live", updated_at: row.updated_at, anagrafe_id: row.anagrafe_id, change_pct: (row.change_pct!=null?Number(row.change_pct):null)};
       }
     });
   } catch(e) { console.warn("price_cache_new load failed", e); }
 }
 
-async function saveLastKnownPrice(anagrafeId, cacheKey, price, source, userId) {
+async function saveLastKnownPrice(anagrafeId, cacheKey, price, source, userId, changePct) {
   if(!anagrafeId || !price) return;
-  if(cacheKey) _pricesCache[cacheKey] = {price, source: source||"live", updated_at: new Date().toISOString()};
+  if(cacheKey) _pricesCache[cacheKey] = {price, source: source||"live", updated_at: new Date().toISOString(), change_pct: (changePct!=null?changePct:null)};
   try {
     const hdr = getHdr();
     const r = await fetchWithTimeout(`${SB_URL}/rest/v1/price_cache_new?on_conflict=anagrafe_id`, {
@@ -225,7 +225,8 @@ async function saveLastKnownPrice(anagrafeId, cacheKey, price, source, userId) {
         last_price: price,
         tipo: source||"live",
         updated_by: userId||_currentSession?.user?.id,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        change_pct: (changePct!=null?changePct:null)
       })
     });
     if(!r.ok) console.error("price_cache_new failed:", r.status, await r.text());
@@ -849,14 +850,18 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
       else if(bp&&bp.price>0){ rawPrice=bp.price; if(bp.stale) stale=true; }
       else if(lkp){ rawPrice=lkp.price; stale=true; }
       if(manualP) changePct=manualP.change_pct!=null?manualP.change_pct:null;
-      else changePct=bp&&bp.change_pct!=null?bp.change_pct:null;
+      else if(bp&&bp.change_pct!=null) changePct=bp.change_pct;
+      else if(lkp && lkp.change_pct!=null && lkp.updated_at && lkp.updated_at.slice(0,10)===today()) changePct=lkp.change_pct;
+      else changePct=null;
     } else {
       var lp=livePrices[p.ticker];
       if(manualP){ rawPrice=manualP.price; }
       else if(lp&&lp.price){ rawPrice=lp.price; if(lp.stale) stale=true; }
       else if(lkp){ rawPrice=lkp.price; stale=true; }
       if(manualP) changePct=manualP.change_pct!=null?manualP.change_pct:null;
-      else changePct=lp&&lp.change_pct!=null?lp.change_pct:null;
+      else if(lp&&lp.change_pct!=null) changePct=lp.change_pct;
+      else if(lkp && lkp.change_pct!=null && lkp.updated_at && lkp.updated_at.slice(0,10)===today()) changePct=lkp.change_pct;
+      else changePct=null;
     }
     var ctv=rawPrice!=null?rawPrice*p.qty:null;
     return {rawPrice, ctv, changePct, stale, isBond};
@@ -947,12 +952,14 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
           var bp=effectiveBondPrices[cacheKey];
           rawPrice=manualP?manualP.price:(bp&&bp.price>0?bp.price:(_pricesCache[cacheKey]?_pricesCache[cacheKey].price:null));
           if(manualP) changePct=manualP.change_pct!=null?manualP.change_pct:null;
-          else changePct=bp&&bp.change_pct!=null?bp.change_pct:null;
+          else if(bp&&bp.change_pct!=null) changePct=bp.change_pct;
+          else { var lkpAC=_pricesCache[cacheKey]; if(lkpAC && lkpAC.change_pct!=null && lkpAC.updated_at && lkpAC.updated_at.slice(0,10)===today()) changePct=lkpAC.change_pct; }
         } else {
           var lp=livePrices[p.ticker];
           rawPrice=manualP?manualP.price:(lp&&lp.price?lp.price:null);
           if(manualP) changePct=manualP.change_pct!=null?manualP.change_pct:null;
-          else changePct=lp&&lp.change_pct!=null?lp.change_pct:null;
+          else if(lp&&lp.change_pct!=null) changePct=lp.change_pct;
+          else { var lkpAC2=_pricesCache[cacheKey]; if(lkpAC2 && lkpAC2.change_pct!=null && lkpAC2.updated_at && lkpAC2.updated_at.slice(0,10)===today()) changePct=lkpAC2.change_pct; }
         }
         var ctv=rawPrice!=null?rawPrice*p.qty:null;
         totInvAC+=p.cost;
@@ -976,14 +983,18 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
           else if(bp&&bp.price>0){ rawPrice=bp.price; if(bp.stale) stale=true; }
           else if(lkp){ rawPrice=lkp.price; stale=true; }
           if(manualP) changePct=manualP.change_pct!=null?manualP.change_pct:null;
-          else changePct=bp&&bp.change_pct!=null?bp.change_pct:null;
+          else if(bp&&bp.change_pct!=null) changePct=bp.change_pct;
+          else if(lkp && lkp.change_pct!=null && lkp.updated_at && lkp.updated_at.slice(0,10)===today()) changePct=lkp.change_pct;
+          else changePct=null;
         } else {
           var lp=livePrices[p.ticker];
           if(manualP){ rawPrice=manualP.price; }
           else if(lp&&lp.price){ rawPrice=lp.price; if(lp.stale) stale=true; }
           else if(lkp){ rawPrice=lkp.price; stale=true; }
           if(manualP) changePct=manualP.change_pct!=null?manualP.change_pct:null;
-          else changePct=lp&&lp.change_pct!=null?lp.change_pct:null;
+          else if(lp&&lp.change_pct!=null) changePct=lp.change_pct;
+          else if(lkp && lkp.change_pct!=null && lkp.updated_at && lkp.updated_at.slice(0,10)===today()) changePct=lkp.change_pct;
+          else changePct=null;
         }
 
         var livePrice=rawPrice;
@@ -1338,7 +1349,7 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
                 var oldPrice = (_pricesCache[ck] && _pricesCache[ck].price>0) ? _pricesCache[ck].price : null;
                 var newChangePct = (oldPrice!=null) ? Math.round(((v-oldPrice)/oldPrice)*10000)/100 : null;
                 setManualBondPrices(function(prev){var n=Object.assign({},prev);n[ck]={price:v,change_pct:newChangePct,manual:true};return n;});
-                saveLastKnownPrice(aid,ck,v,"manual",userId);
+                saveLastKnownPrice(aid,ck,v,"manual",userId,newChangePct);
                 onRefresh();
                 setTimeout(function(){
                   // Usa window._tf_grand_total aggiornato dopo il re-render

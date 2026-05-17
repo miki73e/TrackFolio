@@ -195,6 +195,10 @@ async function fetchWithTimeout(url, opts, ms=20000) {
 let _pricesCache = {}; // {isin|ticker: {price, source, updated_at}}
 let _anagList = []; // popolato da loadData
 
+// Demo user: sandbox mode (legge da txdemo/snapdemo, scritture solo in-memory)
+const DEMO_EMAIL = "trackfolio@yahoo.com";
+let _isDemo = false;
+
 async function loadPricesCache() {
   try {
     const hdr = getHdr();
@@ -215,6 +219,8 @@ async function loadPricesCache() {
 async function saveLastKnownPrice(anagrafeId, cacheKey, price, source, userId, changePct) {
   if(!anagrafeId || !price) return;
   if(cacheKey) _pricesCache[cacheKey] = {price, source: source||"live", updated_at: new Date().toISOString(), change_pct: (changePct!=null?changePct:null)};
+  // Demo: aggiorna solo cache in-memory, non scrive su DB condiviso
+  if(_isDemo) return;
   try {
     const hdr = getHdr();
     const r = await fetchWithTimeout(`${SB_URL}/rest/v1/price_cache_new?on_conflict=anagrafe_id`, {
@@ -234,10 +240,16 @@ async function saveLastKnownPrice(anagrafeId, cacheKey, price, source, userId, c
 }
 
 async function sbLoad(table, impersonateUid) {
+  // Demo: legge da txdemo/snapdemo invece di transactions_new/snapshot
+  let realTable = table;
+  if (_isDemo) {
+    if (table === "transactions_new") realTable = "txdemo";
+    else if (table === "snapshot") realTable = "snapdemo";
+  }
   const hdr = getHdr();
   let r;
   try {
-    let url = `${SB_URL}/rest/v1/${table}?select=*&order=id`;
+    let url = `${SB_URL}/rest/v1/${realTable}?select=*&order=id`;
     if(impersonateUid) url += `&user_id=eq.${impersonateUid}`;
     r = await fetchWithTimeout(url, {headers: hdr});
   } catch(netErr) {
@@ -246,11 +258,15 @@ async function sbLoad(table, impersonateUid) {
   if (!r.ok) {
     let txt = "";
     try { txt = await r.text(); } catch(e) {}
-    throw new Error(`HTTP ${r.status} su ${table}: ${txt.slice(0,200)}`);
+    throw new Error(`HTTP ${r.status} su ${realTable}: ${txt.slice(0,200)}`);
   }
   return r.json();
 }
 async function sbInsert(table, row) {
+  // Demo: sandbox in-memory, no DB write. Restituisce id fittizio per il chiamante.
+  if (_isDemo && (table === "transactions_new" || table === "snapshot")) {
+    return { ...row, id: -Date.now() - Math.floor(Math.random()*1000) };
+  }
   const hdr = getHdr();
   const r = await fetchWithTimeout(`${SB_URL}/rest/v1/${table}`, {
     method: "POST", headers: {...hdr, "Prefer": "return=representation"},
@@ -280,6 +296,8 @@ async function sbUpsert(table, row, onConflict="data") {
   return rows[0];
 }
 async function sbUpdate(table, id, row) {
+  // Demo: sandbox in-memory, no DB write
+  if (_isDemo && (table === "transactions_new" || table === "snapshot")) return;
   const hdr = getHdr();
   const r = await fetchWithTimeout(`${SB_URL}/rest/v1/${table}?id=eq.${id}`, {
     method: "PATCH", headers: {...hdr, "Prefer": "return=representation"},
@@ -288,6 +306,8 @@ async function sbUpdate(table, id, row) {
   if (!r.ok) throw new Error(`Update ${table} failed: ${r.status}`);
 }
 async function sbDelete(table, id) {
+  // Demo: sandbox in-memory, no DB write
+  if (_isDemo && (table === "transactions_new" || table === "snapshot")) return;
   const hdr = getHdr();
   const r = await fetchWithTimeout(`${SB_URL}/rest/v1/${table}?id=eq.${id}`, {
     method: "DELETE", headers: hdr
@@ -316,6 +336,7 @@ const css = `
   --g:#22c55e;--r:#ef4444;--bl:#3b82f6;--y:#f59e0b;
   --t:#f1f5f9;--m:#cbd5e1;--m2:#94a3b8;
   --mono:'Helvetica Neue',Helvetica,Arial,sans-serif;--sans:'Inter',sans-serif;
+  --nav-h:47px;--pbar-h:44px;
 }
 .light{
   --bg:#f8fafc;--s1:#ffffff;--s2:#f1f5f9;--b:#e2e8f0;
@@ -324,12 +345,12 @@ const css = `
 body{background:var(--bg);color:var(--t);font-family:var(--sans);min-height:100vh;font-size:15px}::selection{background:rgba(0,0,0,0.08);color:inherit;}
 .cv,.pb,.pt,.bdg,.hcv,.ftag,td,.fg input,.fg select,[style*="var(--mono)"]{font-variant-numeric:tabular-nums}
 td:first-child{font-variant-numeric:normal}
-.nav{display:flex;background:var(--s1);border-bottom:1px solid var(--b);overflow-x:auto;scrollbar-width:none}
+.nav{display:flex;background:var(--s1);border-bottom:1px solid var(--b);overflow-x:auto;scrollbar-width:none;position:sticky;top:0;z-index:90}
 .nav::-webkit-scrollbar{display:none}
 .nb{flex:0 0 auto;padding:13px 14px;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;border:none;background:none;color:var(--m);border-bottom:2px solid transparent;white-space:nowrap;transition:all .15s}
 .nb.on{color:var(--bl);border-bottom-color:var(--bl)}
 .nb:hover:not(.on){color:var(--t)}
-.pbar{display:flex;gap:5px;padding:9px 14px;background:var(--s1);border-bottom:1px solid var(--b);overflow-x:auto;scrollbar-width:none;align-items:center}
+.pbar{display:flex;gap:5px;padding:9px 14px;background:var(--s1);border-bottom:1px solid var(--b);overflow-x:auto;scrollbar-width:none;align-items:center;position:sticky;top:calc(var(--nav-h) - 1px);z-index:89}
 .pbar::-webkit-scrollbar{display:none}
 .pb{font-family:var(--mono);font-size:12px;font-weight:700;padding:5px 13px;border-radius:4px;border:1px solid var(--b);background:none;color:var(--t);cursor:pointer;transition:all .15s;white-space:nowrap}
 .pb.on{background:var(--bl);color:#fff;border-color:var(--bl);font-weight:700}
@@ -366,13 +387,13 @@ tr:hover td:first-child{background:var(--s2)}
 .hcard .hpct{grid-row:2;grid-column:4;font-weight:700;text-align:right;font-family:var(--mono);font-size:15px;font-variant-numeric:tabular-nums;min-width:80px}
 .hcard .hdiff{grid-row:2;grid-column:3;font-weight:700;text-align:right;font-family:var(--mono);font-size:15px;font-variant-numeric:tabular-nums;min-width:64px}
 .tcard{grid-template-columns:auto auto 1fr !important;column-gap:12px !important}
-.tcard .tdate{grid-row:1;grid-column:1;font-weight:700;font-size:15px;color:var(--t);font-family:var(--sans);white-space:nowrap}
+.tcard .tdate{grid-row:1;grid-column:1;font-weight:700;font-size:15px;color:var(--t);font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 .tcard .tbadge{grid-row:2;grid-column:1;align-self:start}
 .tcard .hdot{grid-row:1;grid-column:2;align-self:center}
 .tcard .tname{grid-row:1;grid-column:3;font-weight:700;font-size:15px;color:var(--t);font-family:var(--sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .tcard .tsub{grid-row:2;grid-column:3;font-size:12px;color:var(--m);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .scard{grid-template-columns:auto 1fr auto !important;column-gap:12px !important}
-.scard .sdate{grid-row:1;grid-column:1;font-weight:700;font-size:15px;color:var(--t);font-family:var(--sans);white-space:nowrap;display:flex;align-items:center}
+.scard .sdate{grid-row:1;grid-column:1;font-weight:700;font-size:15px;color:var(--t);font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap;display:flex;align-items:center}
 .scard .sval{grid-row:1;grid-column:3;font-weight:700;text-align:right;font-family:var(--mono);font-size:15px;color:var(--t);font-variant-numeric:tabular-nums}
 .scard .ssub{grid-row:2;grid-column:3;font-size:12px;color:var(--m);font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
 .hm{display:grid;grid-template-columns:repeat(6,1fr);gap:5px}
@@ -398,7 +419,7 @@ tr:hover td:first-child{background:var(--s2)}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;z-index:300;padding:14px}
 .modal-bg.fs{padding:0;background:var(--bg)}
 .modal{background:var(--s1);border:1px solid var(--b);border-radius:12px;padding:22px;width:100%;max-width:580px;max-height:92vh;overflow-y:auto}
-.modal.fs{max-width:none;max-height:none;height:100vh;border:none;border-radius:0;padding:18px}
+.modal.fs{max-width:none;max-height:none;height:100vh;border:none;border-radius:0;padding:18px;background:var(--bg)}
 .mhdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
 .mtitle{font-size:15px;font-weight:700}
 .mx{background:none;border:none;color:var(--m);font-size:17px;cursor:pointer}
@@ -1077,22 +1098,37 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
 
   return (
     <div>
+      {/* ── HEADER STICKY (ALL/DAY) ── */}
+      {(view==="ALL"||view==="DAY")&&<div style={{position:"sticky",top:"calc(var(--nav-h) - 1px)",background:"var(--bg)",zIndex:80,paddingTop:4}}>
       {/* ── BOX UNIFICATO IN ALTO (Aperte + Oggi) ── */}
-      {(view==="ALL"||view==="DAY")&&<div style={{display:"flex",gap:10,marginBottom:14,alignItems:"stretch"}}>
-        <div style={{flex:1,background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,padding:"14px 16px"}}>
-          <div style={{fontSize:10,color:"var(--t)",textTransform:"uppercase",letterSpacing:".1em",marginBottom:6}}>Controvalore</div>
-          <div style={{fontFamily:"var(--mono)",fontSize:22,fontWeight:700,color:"var(--t)"}}>{fN(grandTotal)}</div>
-          <div style={{fontSize:12,color:"var(--m)",marginTop:2,fontFamily:"var(--mono)"}}>Investito: <span style={{color:"var(--t)"}}>{fN(totInvAll)}</span></div>
+      <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"stretch"}}>
+        {/* Box SX: Controvalore (R1) + Investito (R2 piccolo) */}
+        <div style={{flex:1,background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,padding:"10px 14px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8}}>
+            <span style={{fontSize:10,color:"var(--t)",textTransform:"uppercase",letterSpacing:".1em",fontWeight:700}}>CVAL</span>
+            <span style={{fontFamily:"var(--mono)",fontSize:21,fontWeight:700,color:"var(--t)",lineHeight:1}}>{fN(grandTotal)}</span>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8,marginTop:4}}>
+            <span style={{fontSize:10,color:"var(--m)",textTransform:"uppercase",letterSpacing:".1em",fontWeight:700}}>Inv</span>
+            <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,color:"var(--m)",lineHeight:1}}>{fN(totInvAll)}</span>
+          </div>
         </div>
-        <div style={{flex:1,background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,padding:"14px 16px"}}>
-          <div style={{fontSize:10,color:"var(--t)",textTransform:"uppercase",letterSpacing:".1em",marginBottom:6}}>Var giorno</div>
-          <div style={{fontFamily:"var(--mono)",fontSize:22,fontWeight:700}} className={sgn(totVarDay)}>{hasDayVar?fN(totVarDay):"—"}</div>
-          <div style={{fontSize:12,color:"var(--m)",marginTop:2,fontFamily:"var(--mono)"}}>Var %: <span className={sgn(varDayPct)}>{varDayPct!=null?fP(varDayPct,2):"—"}</span></div>
-        </div>
-      </div>}
+        {/* Box DX: dinamico in base a view (Aperte=diff totale, Oggi=var giorno) */}
+        {view==="DAY" ? (
+          <div style={{flex:1,background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,padding:"10px 14px"}}>
+            <div style={{textAlign:"right",fontFamily:"var(--mono)",fontSize:21,fontWeight:700,lineHeight:1}} className={sgn(totVarDay)}>{hasDayVar?fN(totVarDay):"—"}</div>
+            <div style={{textAlign:"right",fontFamily:"var(--mono)",fontSize:15,fontWeight:700,lineHeight:1,marginTop:4}} className={sgn(varDayPct)}>{varDayPct!=null?fP(varDayPct,2):"—"}</div>
+          </div>
+        ) : (
+          <div style={{flex:1,background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,padding:"10px 14px"}}>
+            <div style={{textAlign:"right",fontFamily:"var(--mono)",fontSize:21,fontWeight:700,lineHeight:1}} className={sgn(totDiffAll)}>{fN(totDiffAll)}</div>
+            <div style={{textAlign:"right",fontFamily:"var(--mono)",fontSize:15,fontWeight:700,lineHeight:1,marginTop:4}} className={sgn(totDiffPctAll)}>{totDiffPctAll!=null?fP(totDiffPctAll,2):"—"}</div>
+          </div>
+        )}
+      </div>
 
       {/* ── TOOLBAR: toggle + orario + comprimi ── */}
-      {!forceView && (view==="ALL"||view==="DAY") && <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+      {!forceView && <div style={{display:"flex",alignItems:"center",gap:10,paddingBottom:8}}>
         {/* Toggle Aperte | Oggi */}
         <div style={{display:"flex",border:"1px solid var(--b)",borderRadius:5,overflow:"hidden"}}>
           <button onClick={function(){setHoldingsView("DAY");}}
@@ -1115,6 +1151,7 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
           {collapsed?"▶ Espandi":"▼ Comprimi"}
         </button>
       </div>}
+      </div>}
 
       {/* ── LISTA HOLDINGS (Aperte + Oggi) ── */}
       {(view==="ALL"||view==="DAY")&&<>
@@ -1123,6 +1160,7 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
 
       {/* ── ALLOCAZIONE ── */}
       {view==="ALLOC"&&<>
+        <div style={{position:"sticky",top:"calc(var(--nav-h) - 1px)",background:"var(--bg)",zIndex:80,paddingTop:4,paddingBottom:8}}>
         {/* Toolbar Comprimi/Espandi (in alto a sx, sopra donut) */}
         <div style={{display:"flex",alignItems:"center",marginBottom:12}}>
           <button onClick={function(){setAllocExpanded(function(x){var n=!x;localStorage.setItem("tf_alloc_expanded",n?"1":"0");return n;});setAllocHighlight(null);}}
@@ -1168,6 +1206,7 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
             onSliceClick={function(label){setAllocHighlight(label);}}
             onClear={function(){setAllocHighlight(null);}}/>;
         })()}
+        </div>
 
         <div style={{marginTop:16}}>
           {(()=>{
@@ -1491,7 +1530,7 @@ function AdminTab({anagrafe,setAnagrafe,adminUsers,loadAdminUsers,deleteUser,doI
     <div>
 
       {adminView==="anagrafe"&&<div>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:11,flexWrap:"wrap"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",position:"sticky",top:"calc(var(--nav-h) - 1px)",background:"var(--bg)",zIndex:80,padding:"8px 0 11px"}}>
           <button className="btn bp" onClick={openAnagNew}>+ Nuovo</button>
           <input type="search" placeholder="Cerca strumento…"
             value={anagSearch} onChange={e=>setAnagSearch(e.target.value)}
@@ -1517,7 +1556,7 @@ function AdminTab({anagrafe,setAnagrafe,adminUsers,loadAdminUsers,deleteUser,doI
       </div>}
 
       {adminView==="utenti"&&<div>
-        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:11}}>
+        <div style={{display:"flex",justifyContent:"flex-end",position:"sticky",top:"calc(var(--nav-h) - 1px)",background:"var(--bg)",zIndex:80,padding:"8px 0 11px"}}>
           <button className="btn bg_" onClick={loadAdminUsers}>↻ Ricarica</button>
         </div>
         {adminUsers.length===0?<div className="empty">Nessun utente caricato</div>:(
@@ -1554,6 +1593,10 @@ function AdminTab({anagrafe,setAnagrafe,adminUsers,loadAdminUsers,deleteUser,doI
               </div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,padding:"8px 0 16px"}}>
+              {anagModal!=="new"&&<div className="fg" style={{gridColumn:"span 2"}}>
+                <label>ID</label>
+                <input value={anagModal.id||""} disabled style={{opacity:0.6}}/>
+              </div>}
               <div className="fg" style={{gridColumn:"span 2"}}>
                 <label>Nome asset</label>
                 <input value={anagForm.asset} onChange={e=>setAnagForm(p=>({...p,asset:e.target.value}))} disabled={!anagEdit} autoFocus={anagEdit}/>
@@ -1705,6 +1748,7 @@ function App() {
 
     const { data: listener } = _sb.auth.onAuthStateChange(async (_event, s) => {
       _currentSession = s;
+      _isDemo = (s?.user?.email||"").toLowerCase() === DEMO_EMAIL.toLowerCase();
       if(_event === "SIGNED_IN") {
         // loadData è gestito solo da getSession — SIGNED_IN aggiorna solo la sessione
         if(window._tf_is_recovery) { setSession(s); return; }
@@ -1718,6 +1762,7 @@ function App() {
       }
       if(_event === "SIGNED_OUT") {
         dataLoadStarted = false;
+        _isDemo = false;
         setSession(null); setUserProfile(null); setImpUid(null); setImpEmail(null);
         setTxs([]); setSnaps([]); setAnagrafe([]); setReady(false); setLoading(true);
         return;
@@ -1735,6 +1780,7 @@ function App() {
       (async()=>{
         const { data:{ session:s } } = await _sb.auth.getSession();
         _currentSession = s;
+        _isDemo = (s?.user?.email||"").toLowerCase() === DEMO_EMAIL.toLowerCase();
         setSession(s);
         if(s) {
           dataLoadStarted = true;
@@ -1798,6 +1844,7 @@ function App() {
     const { error } = await _sb.auth.signInWithPassword({email:authEmail, password:authPwd});
     if(error) { setAuthErr(error.message); setAuthLoading(false); setLoading(false); return; }
     const { data:{ session:s } } = await _sb.auth.getSession();
+    _isDemo = (s?.user?.email||"").toLowerCase() === DEMO_EMAIL.toLowerCase();
     setSession(s);
     try {
       const hdr = getHdr();
@@ -2938,6 +2985,7 @@ function App() {
 
     {/* TRANSAZIONI */}
     {tab==="transazioni"&&<>
+      <div style={{position:"sticky",top:"calc(var(--nav-h) + var(--pbar-h) - 1px)",background:"var(--bg)",zIndex:80,paddingTop:4}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:9,flexWrap:"wrap"}}>
         <button className="btn bp" style={{fontSize:13,fontWeight:700,padding:"7px 14px"}} onClick={openAdd}>+ Nuova</button>
         <select value={txF.type} onChange={e=>setTxF(f=>({...f,type:e.target.value}))}
@@ -2955,7 +3003,7 @@ function App() {
           {acTypes.map(t=><option key={t} value={t}>{t}</option>)}
         </select>
       </div>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:11,flexWrap:"wrap"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",paddingBottom:11}}>
         <input type="search" placeholder="Cerca strumento…"
           value={txF.inst||""} onChange={e=>setTxF(f=>({...f,inst:e.target.value||null}))}
           style={{fontFamily:"var(--mono)",fontSize:13,fontWeight:700,padding:"7px 12px",borderRadius:6,
@@ -2963,6 +3011,7 @@ function App() {
             flex:"1 1 180px",minWidth:160,outline:"none"}}/>
         <span style={{fontSize:13,fontWeight:700,color:"var(--t)",fontFamily:"var(--mono)"}}>{filtTxs.length}/{txs.length}</span>
         <button className="btn bg_" style={{fontSize:13,fontWeight:700,padding:"7px 12px"}} onClick={exportData}>⬇ CSV</button>
+      </div>
       </div>
       <div>
         {!filtTxs.length?<div className="empty">Nessuna transazione</div>:(
@@ -2992,6 +3041,7 @@ function App() {
 
     {/* SNAPSHOT */}
     {tab==="snapshot"&&<>
+      <div style={{position:"sticky",top:"calc(var(--nav-h) + var(--pbar-h) - 1px)",background:"var(--bg)",zIndex:80,paddingTop:4,paddingBottom:11}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:11,flexWrap:"wrap"}}>
         <button className="btn bp" style={{fontSize:13,fontWeight:700,padding:"7px 14px"}}
           onClick={()=>{setSnapEdit(null);setSnapForm({date:today(),value:"",is_initial:false});setSerr({});setSnapEditMode(true);setSnapModal(true);}}>+ Nuovo</button>
@@ -3000,7 +3050,7 @@ function App() {
       </div>
       {showInitialSnap&&(
         <div style={{background:"rgba(245,158,11,0.1)",border:"1px solid var(--y)",borderRadius:9,
-          padding:"12px 16px",marginBottom:11,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+          padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
           <div>
             <div style={{fontSize:14,fontWeight:700,color:"var(--y)",marginBottom:3}}>📍 Snapshot iniziale mancante</div>
             <div style={{fontSize:14,color:"var(--m)",lineHeight:1.5,fontFamily:"var(--sans)"}}>
@@ -3027,6 +3077,7 @@ function App() {
           </button>
         </div>
       )}
+      </div>
       <div>
         {!filtSnaps.length?<div className="empty">Nessuno snapshot nel periodo</div>:(
           <div className="hlist">
@@ -3387,6 +3438,7 @@ function App() {
       return (
         <div className="modal-bg fs" onClick={closeAll}>
           <div className="modal fs" onClick={e=>e.stopPropagation()}>
+            <div style={{position:"sticky",top:0,background:"var(--bg)",zIndex:5,marginLeft:-18,marginRight:-18,paddingLeft:18,paddingRight:18,paddingTop:0,paddingBottom:0}}>
             <div className="mhdr">
               <div className="mtitle">Posizioni chiuse</div>
               <button className="mx" onClick={closeAll}>✕</button>
@@ -3394,11 +3446,11 @@ function App() {
 
             {/* Box fisso in alto */}
             <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"stretch"}}>
-              <div style={{flex:1,background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,padding:"14px 16px"}}>
+              <div style={{flex:1,background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,padding:"10px 14px"}}>
                 <div style={{fontSize:10,fontWeight:700,color:"var(--t)",textTransform:"uppercase",letterSpacing:".1em",marginBottom:6}}>Netto</div>
-                <div style={{fontFamily:"var(--mono)",fontSize:22,fontWeight:700}} className={sgn(totNet)}>{fN(totNet)}</div>
+                <div style={{fontFamily:"var(--mono)",fontSize:21,fontWeight:700,lineHeight:1}} className={sgn(totNet)}>{fN(totNet)}</div>
               </div>
-              <div style={{flex:1,background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,padding:"14px 16px",display:"flex",flexDirection:"column",justifyContent:"center",gap:6}}>
+              <div style={{flex:1,background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,padding:"10px 14px",display:"flex",flexDirection:"column",justifyContent:"center",gap:6}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
                   <span style={{fontSize:11,fontWeight:700,color:"var(--m)",fontFamily:"var(--mono)"}}>P/L</span>
                   <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700}} className={sgn(totPl)}>{fN(totPl)}</span>
@@ -3408,6 +3460,7 @@ function App() {
                   <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,color:"var(--r)"}}>{fN(totTax)}</span>
                 </div>
               </div>
+            </div>
             </div>
 
             {!rows.length?<div className="empty">Nessuna vendita nel periodo</div>:(
@@ -3612,33 +3665,31 @@ function App() {
       return (
         <div className="modal-bg fs" onClick={closeAll}>
           <div className="modal fs" style={{maxWidth:"none"}} onClick={e=>e.stopPropagation()}>
-            <div className="mhdr">
-              <div className="mtitle">Cedole/Dividendi</div>
-              <button className="mx" onClick={closeAll}>✕</button>
-            </div>
-
-            {/* ── BOX FISSO IN ALTO ── */}
-            <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"stretch"}}>
-              <div style={{flex:1,background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,padding:"14px 16px"}}>
-                <div style={{fontSize:10,fontWeight:700,color:"var(--t)",textTransform:"uppercase",letterSpacing:".1em",marginBottom:6}}>Netto</div>
-                <div style={{fontFamily:"var(--mono)",fontSize:22,fontWeight:700}} className={sgn(totNet)}>{fN(totNet)}</div>
-              </div>
-              <div style={{flex:1,background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,padding:"14px 16px",display:"flex",flexDirection:"column",justifyContent:"center",gap:6}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
-                  <span style={{fontSize:11,fontWeight:700,color:"var(--m)",fontFamily:"var(--mono)"}}>Income</span>
-                  <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700}} className={sgn(totIncome)}>{fN(totIncome)}</span>
-                </div>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
-                  <span style={{fontSize:11,fontWeight:700,color:"var(--m)",fontFamily:"var(--mono)"}}>Tax</span>
-                  <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,color:"var(--r)"}}>{fN(totTax)}</span>
-                </div>
-              </div>
-            </div>
-
             {isAll ? (
-              /* ── ALL VIEW: bar per anno + lista anni espandibili ── */
+              /* ── ALL VIEW: header + box + bar anni tutto sticky ── */
               <>
-                <div style={{marginBottom:14}} onClick={()=>setActiveCedMi(null)}>
+                <div style={{position:"sticky",top:0,background:"var(--bg)",zIndex:5,marginLeft:-18,marginRight:-18,paddingLeft:18,paddingRight:18,paddingBottom:8}}>
+                  <div className="mhdr">
+                    <div className="mtitle">Cedole/Dividendi</div>
+                    <button className="mx" onClick={closeAll}>✕</button>
+                  </div>
+                  <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"stretch"}}>
+                    <div style={{flex:1,background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,padding:"10px 14px"}}>
+                      <div style={{fontSize:10,fontWeight:700,color:"var(--t)",textTransform:"uppercase",letterSpacing:".1em",marginBottom:6}}>Netto</div>
+                      <div style={{fontFamily:"var(--mono)",fontSize:21,fontWeight:700,lineHeight:1}} className={sgn(totNet)}>{fN(totNet)}</div>
+                    </div>
+                    <div style={{flex:1,background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,padding:"10px 14px",display:"flex",flexDirection:"column",justifyContent:"center",gap:6}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+                        <span style={{fontSize:11,fontWeight:700,color:"var(--m)",fontFamily:"var(--mono)"}}>Income</span>
+                        <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700}} className={sgn(totIncome)}>{fN(totIncome)}</span>
+                      </div>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+                        <span style={{fontSize:11,fontWeight:700,color:"var(--m)",fontFamily:"var(--mono)"}}>Tax</span>
+                        <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,color:"var(--r)"}}>{fN(totTax)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div onClick={()=>setActiveCedMi(null)}>
                   {(()=>{
                     const yrs=Object.keys(cedByYear).sort();
                     const vals=yrs.map(yr=>(cedByYear[yr]||[]).reduce((a,b)=>a+b,0));
@@ -3667,6 +3718,7 @@ function App() {
                     );
                   })()}
                 </div>
+                </div>
                 {/* Lista anni espandibili in mesi (cronologico) */}
                 <div className="hlist">
                   {Object.keys(cedByYear).sort().map((yr,yi)=>{
@@ -3685,28 +3737,50 @@ function App() {
                 </div>
               </>
             ) : (
-              /* ── VISTA ANNO: istogramma + toggle Strumento/Period + lista ── */
+              /* ── VISTA ANNO: header + box + istogramma + toolbar tutto sticky ── */
               <>
-                <div style={{marginBottom:10}}>
-                  {(()=>{
-                    // Istogramma: sempre tutto (no filtri sui dati)
-                    // Il dimming è gestito visualmente da StackedBar tramite activeMi/activeInst
-                    return <StackedBar byMonth={cedByMonth} insts={cedInsts} allInsts={cedInsts}
-                      activeMi={activeCedMi}
-                      activeInst={activeCedInst}
-                      onBar={mi=>{setActiveCedMi(mi); setCedView("period"); setCedExpanded(MN[mi]); setActiveCedInst(null);}}
-                      onClear={()=>{setActiveCedMi(null); setActiveCedInst(null); if(cedView==="period") setCedExpanded("_all_");}}/>;
-                  })()}
-                </div>
+                <div style={{position:"sticky",top:0,background:"var(--bg)",zIndex:5,marginLeft:-18,marginRight:-18,paddingLeft:18,paddingRight:18,paddingBottom:8}}>
+                  <div className="mhdr">
+                    <div className="mtitle">Cedole/Dividendi</div>
+                    <button className="mx" onClick={closeAll}>✕</button>
+                  </div>
+                  <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"stretch"}}>
+                    <div style={{flex:1,background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,padding:"10px 14px"}}>
+                      <div style={{fontSize:10,fontWeight:700,color:"var(--t)",textTransform:"uppercase",letterSpacing:".1em",marginBottom:6}}>Netto</div>
+                      <div style={{fontFamily:"var(--mono)",fontSize:21,fontWeight:700,lineHeight:1}} className={sgn(totNet)}>{fN(totNet)}</div>
+                    </div>
+                    <div style={{flex:1,background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,padding:"10px 14px",display:"flex",flexDirection:"column",justifyContent:"center",gap:6}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+                        <span style={{fontSize:11,fontWeight:700,color:"var(--m)",fontFamily:"var(--mono)"}}>Income</span>
+                        <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700}} className={sgn(totIncome)}>{fN(totIncome)}</span>
+                      </div>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+                        <span style={{fontSize:11,fontWeight:700,color:"var(--m)",fontFamily:"var(--mono)"}}>Tax</span>
+                        <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,color:"var(--r)"}}>{fN(totTax)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{marginBottom:10}}>
+                    {(()=>{
+                      // Istogramma: sempre tutto (no filtri sui dati)
+                      // Il dimming è gestito visualmente da StackedBar tramite activeMi/activeInst
+                      return <StackedBar byMonth={cedByMonth} insts={cedInsts} allInsts={cedInsts}
+                        activeMi={activeCedMi}
+                        activeInst={activeCedInst}
+                        onBar={mi=>{setActiveCedMi(mi); setCedView("period"); setCedExpanded(MN[mi]); setActiveCedInst(null);}}
+                        onClear={()=>{setActiveCedMi(null); setActiveCedInst(null); if(cedView==="period") setCedExpanded("_all_");}}/>;
+                    })()}
+                  </div>
 
-                {/* Comprimi/Espandi (vista corrente switcha tramite tap istogramma o tap nome strumento) */}
-                <div style={{display:"flex",alignItems:"center",marginBottom:10}}>
-                  <button onClick={()=>{setCedExpanded(cedExpanded==="_all_"?null:"_all_");setActiveCedMi(null);setActiveCedInst(null);}}
-                    style={{fontSize:12,fontFamily:"var(--mono)",padding:"5px 14px",borderRadius:6,
-                      border:"1px solid var(--b)",background:"var(--s2)",color:"var(--t)",cursor:"pointer",
-                      fontWeight:700,display:"flex",alignItems:"center",gap:5}}>
-                    {cedExpanded==="_all_"?"▼ Comprimi":"▶ Espandi"}
-                  </button>
+                  {/* Comprimi/Espandi */}
+                  <div style={{display:"flex",alignItems:"center"}}>
+                    <button onClick={()=>{setCedExpanded(cedExpanded==="_all_"?null:"_all_");setActiveCedMi(null);setActiveCedInst(null);}}
+                      style={{fontSize:12,fontFamily:"var(--mono)",padding:"5px 14px",borderRadius:6,
+                        border:"1px solid var(--b)",background:"var(--s2)",color:"var(--t)",cursor:"pointer",
+                        fontWeight:700,display:"flex",alignItems:"center",gap:5}}>
+                      {cedExpanded==="_all_"?"▼ Comprimi":"▶ Espandi"}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="hlist">

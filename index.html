@@ -1102,15 +1102,11 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
       {(view==="ALL"||view==="DAY")&&<div style={{position:"sticky",top:"calc(var(--nav-h) - 1px)",background:"var(--bg)",zIndex:80,paddingTop:4}}>
       {/* ── BOX UNIFICATO IN ALTO (Aperte + Oggi) ── */}
       <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"stretch"}}>
-        {/* Box SX: Controvalore (R1) + Investito (R2 piccolo) */}
+        {/* Box SX: Controvalore (R1) + Investito (R2 piccolo con suffix INV) */}
         <div style={{flex:1,background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,padding:"10px 14px"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8}}>
-            <span style={{fontSize:10,color:"var(--t)",textTransform:"uppercase",letterSpacing:".1em",fontWeight:700}}>CVAL</span>
-            <span style={{fontFamily:"var(--mono)",fontSize:21,fontWeight:700,color:"var(--t)",lineHeight:1}}>{fN(grandTotal)}</span>
-          </div>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8,marginTop:4}}>
-            <span style={{fontSize:10,color:"var(--m)",textTransform:"uppercase",letterSpacing:".1em",fontWeight:700}}>Inv</span>
-            <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,color:"var(--m)",lineHeight:1}}>{fN(totInvAll)}</span>
+          <div style={{fontFamily:"var(--mono)",fontSize:21,fontWeight:700,color:"var(--t)",lineHeight:1}}>{fN(grandTotal)}</div>
+          <div style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,color:"var(--t)",lineHeight:1,marginTop:4}}>
+            {fN(totInvAll)}  <span style={{fontSize:10,letterSpacing:".1em",textTransform:"uppercase"}}>Inv</span>
           </div>
         </div>
         {/* Box DX: dinamico in base a view (Aperte=diff totale, Oggi=var giorno) */}

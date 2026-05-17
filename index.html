@@ -2894,24 +2894,6 @@ function App() {
 
     {/* DASHBOARD */}
     {tab==="dashboard"&&<>
-      {ready&&txs.length>0&&showInitialSnap&&(
-        <div style={{background:"rgba(59,130,246,0.08)",border:"1px solid var(--bl)",borderRadius:9,
-          padding:"14px 18px",marginBottom:14,display:"flex",justifyContent:"space-between",
-          alignItems:"center",gap:12,flexWrap:"wrap"}}>
-          <div>
-            <div style={{fontWeight:700,color:"var(--bl)",marginBottom:4,fontSize:14}}>
-              📍 Snapshot iniziale mancante
-            </div>
-            <div style={{fontSize:14,color:"var(--m)",lineHeight:1.5,fontFamily:"var(--sans)"}}>
-              Senza snapshot i KPI non sono calcolabili. Vai su Snapshot per crearlo — puoi usare il calcolo automatico sull'investito oppure inserire il valore reale di mercato.
-            </div>
-          </div>
-          <button className="btn bp" style={{whiteSpace:"nowrap",flexShrink:0}}
-            onClick={()=>setTab("snapshot")}>
-            Vai a Snapshot →
-          </button>
-        </div>
-      )}
       <div className={`card ${rNeg?"r":"g"}`}
         style={{cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"14px 16px"}}
         onClick={()=>kpis&&setPlDetailModal(true)}>
@@ -3044,35 +3026,6 @@ function App() {
         <div style={{flex:1}}/>
         <span style={{fontSize:13,fontWeight:700,color:"var(--t)",fontFamily:"var(--mono)"}}>{filtSnaps.length}/{snaps.length}</span>
       </div>
-      {showInitialSnap&&(
-        <div style={{background:"rgba(245,158,11,0.1)",border:"1px solid var(--y)",borderRadius:9,
-          padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
-          <div>
-            <div style={{fontSize:14,fontWeight:700,color:"var(--y)",marginBottom:3}}>📍 Snapshot iniziale mancante</div>
-            <div style={{fontSize:14,color:"var(--m)",lineHeight:1.5,fontFamily:"var(--sans)"}}>
-              Nessuno snapshot trovato prima della prima transazione ({firstTxDate}).
-              Valore calcolato sull'investito: <span style={{color:"var(--t)",fontFamily:"var(--mono)",fontWeight:700}}>{fN(initialSnapValue)}</span>
-            </div>
-          </div>
-          <button className="btn bp" style={{whiteSpace:"nowrap"}}
-            onClick={async()=>{
-              setSyncStatus("saving");
-              try {
-                const existing = snaps.find(s=>s.date===firstTxDate);
-                if(existing) {
-                  impUid ? await adminCall("update-snap",{id:existing.id,row:snapToRow({date:firstTxDate,value:initialSnapValue},impUid||session?.user?.id)}) : await sbUpdate("snapshot", existing.id, snapToRow({date:firstTxDate,value:initialSnapValue},session?.user?.id));
-                  setSnaps(p=>p.map(s=>s.id===existing.id?{...s,value:initialSnapValue}:s));
-                } else {
-                  const ins = impUid ? await adminCall("insert-snap",{row:snapToRow({date:firstTxDate,value:initialSnapValue},impUid||session?.user?.id)}) : await sbInsert("snapshot", snapToRow({date:firstTxDate,value:initialSnapValue},session?.user?.id));
-                  setSnaps(p=>[...p,{id:ins?.id||Date.now(),date:firstTxDate,value:initialSnapValue}].sort((a,b)=>a.date.localeCompare(b.date)));
-                }
-                setSyncStatus("saved"); setTimeout(()=>setSyncStatus(""),2000);
-              } catch(e){ setSyncStatus("error"); }
-            }}>
-            Crea snapshot iniziale
-          </button>
-        </div>
-      )}
       </div>
       <div>
         {!filtSnaps.length?<div className="empty">Nessuno snapshot nel periodo</div>:(
@@ -3201,7 +3154,7 @@ function App() {
       <div className="modal-bg" onClick={()=>setSnapWizard(false)}>
         <div className="modal" style={{maxWidth:360}} onClick={e=>e.stopPropagation()}>
           <div className="mhdr">
-            <div className="mtitle">Snapshot iniziale</div>
+            <div className="mtitle">Valori storici</div>
             <button className="mx" onClick={()=>setSnapWizard(false)}>✕</button>
           </div>
           <div style={{padding:"8px 0 16px"}}>
@@ -3320,7 +3273,7 @@ function App() {
             <button className="mx" onClick={()=>setShowDeleteAccount(false)}>✕</button>
           </div>
           <div style={{fontSize:13,color:"var(--m)",lineHeight:1.8,padding:"8px 0 20px"}}>
-            Stai per eliminare definitivamente il tuo account e <strong style={{color:"var(--t)"}}>tutti i tuoi dati</strong> (transazioni, snapshot, anagrafe).
+            Stai per eliminare definitivamente il tuo account e <strong style={{color:"var(--t)"}}>tutti i tuoi dati</strong> (transazioni, valori storici, anagrafe).
             <br/><br/>
             <span style={{color:"var(--r)"}}>Questa operazione è irreversibile e non può essere annullata.</span>
           </div>
@@ -3339,11 +3292,11 @@ function App() {
       <div className="modal-bg" onClick={()=>setSnapImpactWarning(null)}>
         <div className="modal" style={{maxWidth:400}} onClick={e=>e.stopPropagation()}>
           <div className="mhdr">
-            <div className="mtitle">⚠ Snapshot da verificare</div>
+            <div className="mtitle">⚠ Valori storici da verificare</div>
             <button className="mx" onClick={()=>setSnapImpactWarning(null)}>✕</button>
           </div>
           <div style={{fontSize:13,color:"var(--m)",lineHeight:1.7,marginBottom:12}}>
-            La transazione inserita impatta i seguenti snapshot. I valori non sono stati modificati automaticamente — aggiornali manualmente se necessario.
+            La transazione inserita impatta i seguenti valori storici. I valori non sono stati modificati automaticamente — aggiornali manualmente se necessario.
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16}}>
             {snapImpactWarning.snaps.map(s=>(
@@ -3369,7 +3322,7 @@ function App() {
             <button className="mx" onClick={()=>setAutoSnapNotice(false)}>✕</button>
           </div>
           <div style={{fontSize:14,color:"var(--m)",lineHeight:1.7,padding:"8px 0 16px",fontFamily:"var(--sans)"}}>
-            Il controvalore è stato aggiornato con i prezzi rilevati. Puoi sempre modificare il valore in Snapshot, oppure verificare che siano stati catturati tutti i prezzi nel menù Holdings — anche in questo caso puoi intervenire manualmente per eventuali prezzi non trovati.
+            Il controvalore è stato aggiornato con i prezzi rilevati. Puoi sempre modificare il valore in storico, oppure verificare che siano stati catturati tutti i prezzi nel menù Holdings — anche in questo caso puoi intervenire manualmente per eventuali prezzi non trovati.
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"var(--t)",cursor:"pointer"}}>
@@ -3389,11 +3342,11 @@ function App() {
       <div className="modal-bg" onClick={()=>setSnapNotice(false)}>
         <div className="modal" style={{maxWidth:360}} onClick={e=>e.stopPropagation()}>
           <div className="mhdr">
-            <div className="mtitle">Snapshot non aggiornato</div>
+            <div className="mtitle">Valori storici non aggiornati</div>
             <button className="mx" onClick={()=>setSnapNotice(false)}>✕</button>
           </div>
           <div style={{fontSize:14,color:"var(--m)",lineHeight:1.6,padding:"8px 0 16px",fontFamily:"var(--sans)"}}>
-            Transazione salvata. Gli snapshot esistenti non sono stati modificati — aggiornali manualmente nel tab Snapshot se necessario.
+            Transazione salvata, i valori storici esistenti non sono stati modificati, utilizza l'apposito tab per modificarli manualmente se necessario.
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"var(--t)",cursor:"pointer"}}>
@@ -3586,7 +3539,7 @@ function App() {
             <button className="mx" onClick={()=>{setPlOpenModal(false);if(plDetailReturn){setPlDetailReturn(false);setPlDetailModal(true);}}}>✕</button>
           </div>
           <div style={{fontSize:14,color:"var(--m)",lineHeight:1.7,padding:"8px 0 16px",fontFamily:"var(--sans)"}}>
-            Differenza tra le posizioni aperte alla fine del periodo selezionato e le posizioni aperte all&apos;inizio del periodo (o snapshot iniziale se non presente).
+            Differenza tra le posizioni aperte alla fine del periodo selezionato e le posizioni aperte all&apos;inizio del periodo (o valore storico se non presente).
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:4}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",

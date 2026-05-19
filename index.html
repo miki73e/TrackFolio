@@ -1099,7 +1099,7 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
   return (
     <div>
       {/* ── HEADER STICKY (ALL/DAY) ── */}
-      {(view==="ALL"||view==="DAY")&&<div style={{position:"sticky",top:"calc(var(--nav-h) - 1px)",background:"var(--bg)",zIndex:80,paddingTop:13}}>
+      {(view==="ALL"||view==="DAY")&&<div style={{position:"sticky",top:"calc(var(--nav-h) - 1px)",background:"var(--bg)",zIndex:80,paddingTop:4}}>
       {/* ── BOX UNIFICATO IN ALTO (Aperte + Oggi) ── */}
       <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"stretch"}}>
         {/* Box SX: Controvalore (R1) + Investito (R2 piccolo con suffix INV) */}
@@ -1156,7 +1156,7 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
 
       {/* ── ALLOCAZIONE ── */}
       {view==="ALLOC"&&<>
-        <div style={{position:"sticky",top:"calc(var(--nav-h) - 1px)",background:"var(--bg)",zIndex:80,paddingTop:13,paddingBottom:8}}>
+        <div style={{position:"sticky",top:"calc(var(--nav-h) - 1px)",background:"var(--bg)",zIndex:80,paddingTop:4,paddingBottom:8}}>
         {/* Toolbar Comprimi/Espandi (in alto a sx, sopra donut) */}
         <div style={{display:"flex",alignItems:"center",marginBottom:12}}>
           <button onClick={function(){setAllocExpanded(function(x){var n=!x;localStorage.setItem("tf_alloc_expanded",n?"1":"0");return n;});setAllocHighlight(null);}}
@@ -1697,6 +1697,8 @@ function App() {
   const [newPwdErr,setNewPwdErr] = useState("");
   const [newPwdLoading,setNewPwdLoading] = useState(false);
   const [showUserMenu,setShowUserMenu] = useState(false);
+  const [hintDashboard,setHintDashboard] = useState(()=>localStorage.getItem("tf_hint_dashboard_dismissed")!=="1");
+  const [hintRendimento,setHintRendimento] = useState(()=>localStorage.getItem("tf_hint_rendimento_dismissed")!=="1");
   const [lightMode,setLightMode] = useState(()=>localStorage.getItem("tf_theme")==="light"); // {snaps:[...]} o null
   const [txDetail,setTxDetail] = useState(null); // tx detail modal
   const [showCosts,setShowCosts] = useState(false);
@@ -2896,9 +2898,9 @@ function App() {
     {tab==="dashboard"&&<>
       <div className={`card ${rNeg?"r":"g"}`}
         style={{cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"14px 16px"}}
-        onClick={()=>kpis&&setPlDetailModal(true)}>
+        onClick={()=>kpis&&setPlDetailModal(v=>!v)}>
         <div>
-          <div className="cl" style={{marginBottom:6}}>Rendimento ↗</div>
+          <div className="cl" style={{marginBottom:6}}>Rendimento</div>
           <div className={`cv lg ${sgn(kpis?.rendimento)}`}>{fN(kpis?.rendimento)}</div>
         </div>
         <div style={{textAlign:"right"}}>
@@ -2907,6 +2909,82 @@ function App() {
         </div>
       </div>
 
+      {plDetailModal && kpis ? (
+        /* ── DETTAGLIO RENDIMENTO INLINE (sostituisce i grafici) ── */
+        <div className="panel" style={{padding:"14px 16px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <div style={{fontSize:15,fontWeight:700,color:"var(--t)"}}>Dettaglio Rendimento</div>
+            <button className="mx" onClick={()=>setPlDetailModal(false)}>✕</button>
+          </div>
+          <div style={{padding:"4px 0"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 10px",borderBottom:"1px solid var(--b)"}}>
+              <span style={{fontSize:15,fontWeight:700,color:"var(--t)",fontFamily:"var(--mono)"}}>Investito periodo</span>
+              <div style={{display:"flex",gap:14,alignItems:"center"}}>
+                <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,color:"var(--t)"}}>{fN(kpis.mediaInv)}</span>
+                <span style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:600,minWidth:56,textAlign:"right",color:"var(--m)"}}>—</span>
+              </div>
+            </div>
+            <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:2}}>
+              {[
+                {label:"Posizioni aperte", val:kpis.plOpen, onClick:()=>{setPlDetailReturn(true);setPlOpenModal(true);}},
+                {label:"Posizioni chiuse", val:kpis.plClose, onClick:()=>{setPlDetailReturn(true);setSellModal(true);}},
+                {label:"Cedole/Dividendi", val:kpis.cedole, onClick:()=>{setPlDetailReturn(true);setCedoleModal(true);}},
+              ].map(({label,val,onClick})=>{
+                const pctComp = kpis.rendimento!==0&&kpis.pct!=null ? (val/kpis.rendimento)*kpis.pct : null;
+                return (
+                  <div key={label}
+                    style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                      padding:"11px 10px",borderRadius:7,cursor:onClick?"pointer":"default",
+                      background:"transparent"}}
+                    onClick={onClick||undefined}
+                    onMouseEnter={onClick?e=>e.currentTarget.style.background="var(--b)":undefined}
+                    onMouseLeave={onClick?e=>e.currentTarget.style.background="transparent":undefined}>
+                    <span style={{fontSize:14,color:"var(--t)",fontFamily:"var(--mono)"}}>{label}</span>
+                    <div style={{display:"flex",gap:14,alignItems:"center"}}>
+                      <span style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:700}} className={sgn(val)}>{fN(val)}</span>
+                      <span style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:700,minWidth:56,textAlign:"right"}} className={pctComp!=null?sgn(pctComp):"mu"}>{pctComp!=null?fP(pctComp,1):"—"}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{borderTop:"2px solid var(--b)",marginTop:8,padding:"13px 10px",
+              display:"flex",justifyContent:"space-between",alignItems:"center",
+              background:"var(--s1)",borderRadius:7,border:"1px solid var(--b)"}}>
+              <span style={{fontSize:15,fontWeight:700,color:"var(--t)",fontFamily:"var(--mono)"}}>Lordo</span>
+              <div style={{display:"flex",gap:14,alignItems:"center"}}>
+                <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700}} className={sgn((kpis.plOpen||0)+(kpis.plClose||0)+(kpis.cedole||0))}>
+                  {fN((kpis.plOpen||0)+(kpis.plClose||0)+(kpis.cedole||0))}
+                </span>
+                <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,minWidth:56,textAlign:"right"}} className={sgn((kpis.plOpen||0)+(kpis.plClose||0)+(kpis.cedole||0))}>
+                  {kpis.rendimento!==0&&kpis.pct!=null?fP(((kpis.plOpen||0)+(kpis.plClose||0)+(kpis.cedole||0))/kpis.rendimento*kpis.pct,1):"—"}
+                </span>
+              </div>
+            </div>
+            <div style={{padding:"11px 10px",marginTop:6,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",borderRadius:7}}
+              onMouseEnter={e=>e.currentTarget.style.background="var(--b)"}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+              onClick={()=>{setPlDetailReturn(true);setTaxModal(true);}}>
+              <span style={{fontSize:14,color:"var(--t)",fontFamily:"var(--mono)"}}>Tax &amp; Fees</span>
+              <div style={{display:"flex",gap:14,alignItems:"center"}}>
+                <span style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:700,color:"var(--r)"}}>-{fN(kpis.tax||0)}</span>
+                <span style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:700,minWidth:56,textAlign:"right",color:"var(--r)"}}>{kpis.rendimento!==0&&kpis.pct!=null?fP(-(kpis.tax||0)/kpis.rendimento*kpis.pct,1):"—"}</span>
+              </div>
+            </div>
+            <div style={{borderTop:"2px solid var(--b)",marginTop:8,padding:"13px 10px",
+              display:"flex",justifyContent:"space-between",alignItems:"center",
+              background:rNeg?"rgba(239,68,68,0.08)":"rgba(34,197,94,0.08)",borderRadius:7,
+              border:`1px solid ${rNeg?"var(--r)":"var(--g)"}`}}>
+              <span style={{fontSize:16,fontWeight:700,color:"var(--t)",fontFamily:"var(--mono)"}}>Netto</span>
+              <div style={{display:"flex",gap:14,alignItems:"center"}}>
+                <span style={{fontFamily:"var(--mono)",fontSize:18,fontWeight:700}} className={sgn(kpis.rendimento)}>{fN(kpis.rendimento)}</span>
+                <span style={{fontFamily:"var(--mono)",fontSize:18,fontWeight:700,minWidth:56,textAlign:"right"}} className={sgn(kpis.pct)}>{fP(kpis.pct,2)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+      <>
       <div className="panel">
         <div className="pt">Cumulato</div>
         <LineChart pts={linePts}/>
@@ -2955,6 +3033,8 @@ function App() {
           </div>
         </div>
       </div>
+      </>
+      )}
 
 
     </>}
@@ -2963,7 +3043,7 @@ function App() {
 
     {/* TRANSAZIONI */}
     {tab==="transazioni"&&<>
-      <div style={{position:"sticky",top:"calc(var(--nav-h) + var(--pbar-h) - 1px)",background:"var(--bg)",zIndex:80,paddingTop:13}}>
+      <div style={{position:"sticky",top:"calc(var(--nav-h) + var(--pbar-h) - 1px)",background:"var(--bg)",zIndex:80,paddingTop:4}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:9,flexWrap:"wrap"}}>
         <button className="btn bp" style={{fontSize:13,fontWeight:700,padding:"7px 14px"}} onClick={openAdd}>+ Nuova</button>
         <select value={txF.type} onChange={e=>setTxF(f=>({...f,type:e.target.value}))}
@@ -3019,7 +3099,7 @@ function App() {
 
     {/* SNAPSHOT */}
     {tab==="snapshot"&&<>
-      <div style={{position:"sticky",top:"calc(var(--nav-h) + var(--pbar-h) - 1px)",background:"var(--bg)",zIndex:80,paddingTop:13,paddingBottom:11}}>
+      <div style={{position:"sticky",top:"calc(var(--nav-h) + var(--pbar-h) - 1px)",background:"var(--bg)",zIndex:80,paddingTop:4,paddingBottom:11}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:11,flexWrap:"wrap"}}>
         <button className="btn bp" style={{fontSize:13,fontWeight:700,padding:"7px 14px"}}
           onClick={()=>{setSnapEdit(null);setSnapForm({date:today(),value:"",is_initial:false});setSerr({});setSnapEditMode(true);setSnapModal(true);}}>+ Nuovo</button>
@@ -3338,6 +3418,56 @@ function App() {
       </div>
     )}
 
+    {/* Hint Dashboard: appare la prima volta che l'utente è sulla dashboard */}
+    {tab==="dashboard"&&hintDashboard&&(
+      <div className="modal-bg" onClick={()=>setHintDashboard(false)}>
+        <div className="modal" style={{maxWidth:360}} onClick={e=>e.stopPropagation()}>
+          <div className="mhdr">
+            <div className="mtitle">💡 Suggerimento</div>
+            <button className="mx" onClick={()=>setHintDashboard(false)}>✕</button>
+          </div>
+          <div style={{fontSize:14,color:"var(--m)",lineHeight:1.6,padding:"8px 0 16px",fontFamily:"var(--sans)"}}>
+            Clicca nel box per vedere dettagli.
+          </div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"var(--t)",cursor:"pointer"}}>
+              <input type="checkbox" onChange={e=>{
+                if(e.target.checked) localStorage.setItem("tf_hint_dashboard_dismissed","1");
+                else localStorage.removeItem("tf_hint_dashboard_dismissed");
+              }}/>
+              Ho letto, non mostrare più
+            </label>
+            <button className="btn bp" style={{minWidth:80}} onClick={()=>setHintDashboard(false)}>OK</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Hint Rendimento modal: appare la prima volta che l'utente apre il dettaglio rendimento */}
+    {plDetailModal&&hintRendimento&&(
+      <div className="modal-bg" style={{zIndex:400}} onClick={()=>setHintRendimento(false)}>
+        <div className="modal" style={{maxWidth:380}} onClick={e=>e.stopPropagation()}>
+          <div className="mhdr">
+            <div className="mtitle">💡 Suggerimento</div>
+            <button className="mx" onClick={()=>setHintRendimento(false)}>✕</button>
+          </div>
+          <div style={{fontSize:14,color:"var(--m)",lineHeight:1.6,padding:"8px 0 16px",fontFamily:"var(--sans)"}}>
+            Clicca sulle voci di dettaglio — Posizioni aperte, Posizioni chiuse, Cedole/Dividendi, Tax &amp; Fees — per visualizzare i dati di riferimento.
+          </div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"var(--t)",cursor:"pointer"}}>
+              <input type="checkbox" onChange={e=>{
+                if(e.target.checked) localStorage.setItem("tf_hint_rendimento_dismissed","1");
+                else localStorage.removeItem("tf_hint_rendimento_dismissed");
+              }}/>
+              Ho letto, non mostrare più
+            </label>
+            <button className="btn bp" style={{minWidth:80}} onClick={()=>setHintRendimento(false)}>OK</button>
+          </div>
+        </div>
+      </div>
+    )}
+
     {snapNotice&&(
       <div className="modal-bg" onClick={()=>setSnapNotice(false)}>
         <div className="modal" style={{maxWidth:360}} onClick={e=>e.stopPropagation()}>
@@ -3387,7 +3517,7 @@ function App() {
       return (
         <div className="modal-bg fs" onClick={closeAll}>
           <div className="modal fs" onClick={e=>e.stopPropagation()}>
-            <div style={{position:"sticky",top:-18,background:"var(--bg)",zIndex:5,marginLeft:-18,marginRight:-18,marginTop:-18,paddingLeft:18,paddingRight:18,paddingTop:18,paddingBottom:0}}>
+            <div style={{position:"sticky",top:-18,background:"var(--bg)",zIndex:5,marginLeft:-18,marginRight:-18,marginTop:-18,paddingLeft:18,paddingRight:18,paddingTop:18,paddingBottom:10}}>
             <div className="mhdr">
               <div className="mtitle">Posizioni chiuse</div>
               <button className="mx" onClick={closeAll}>✕</button>
@@ -3451,85 +3581,6 @@ function App() {
       );
     })()}
 
-    {/* CEDOLE MODAL */}
-    {plDetailModal&&kpis&&(
-      <div className="modal-bg" onClick={()=>setPlDetailModal(false)}>
-        <div className="modal" style={{maxWidth:400}} onClick={e=>e.stopPropagation()}>
-          <div className="mhdr">
-            <div className="mtitle">Dettaglio Rendimento</div>
-            <button className="mx" onClick={()=>setPlDetailModal(false)}>✕</button>
-          </div>
-          <div style={{padding:"8px 0 4px"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 10px",borderBottom:"1px solid var(--b)"}}>
-              <span style={{fontSize:15,fontWeight:700,color:"var(--t)",fontFamily:"var(--mono)"}}>Investito periodo</span>
-              <div style={{display:"flex",gap:14,alignItems:"center"}}>
-                <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,color:"var(--t)"}}>{fN(kpis.mediaInv)}</span>
-                <span style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:600,minWidth:56,textAlign:"right",color:"var(--m)"}}>—</span>
-              </div>
-            </div>
-            <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:2}}>
-              {[
-                {label:"Posizioni aperte ↗", val:kpis.plOpen, onClick:()=>{setPlDetailModal(false);setPlDetailReturn(true);setPlOpenModal(true);}},
-                {label:"Posizioni chiuse ↗", val:kpis.plClose, onClick:()=>{setPlDetailModal(false);setPlDetailReturn(true);setSellModal(true);}},
-                {label:"Cedole/Dividendi ↗", val:kpis.cedole, onClick:()=>{setPlDetailModal(false);setPlDetailReturn(true);setCedoleModal(true);}},
-              ].map(({label,val,onClick})=>{
-                const pctComp = kpis.rendimento!==0&&kpis.pct!=null ? (val/kpis.rendimento)*kpis.pct : null;
-                return (
-                  <div key={label}
-                    style={{display:"flex",justifyContent:"space-between",alignItems:"center",
-                      padding:"11px 10px",borderRadius:7,cursor:onClick?"pointer":"default",
-                      background:"transparent"}}
-                    onClick={onClick||undefined}
-                    onMouseEnter={onClick?e=>e.currentTarget.style.background="var(--b)":undefined}
-                    onMouseLeave={onClick?e=>e.currentTarget.style.background="transparent":undefined}>
-                    <span style={{fontSize:14,color:"var(--t)",fontFamily:"var(--mono)"}}>{label}</span>
-                    <div style={{display:"flex",gap:14,alignItems:"center"}}>
-                      <span style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:700}} className={sgn(val)}>{fN(val)}</span>
-                      <span style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:700,minWidth:56,textAlign:"right"}} className={pctComp!=null?sgn(pctComp):"mu"}>{pctComp!=null?fP(pctComp,1):"—"}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div style={{borderTop:"2px solid var(--b)",marginTop:8,padding:"13px 10px",
-              display:"flex",justifyContent:"space-between",alignItems:"center",
-              background:"var(--s1)",borderRadius:7,border:"1px solid var(--b)"}}>
-              <span style={{fontSize:15,fontWeight:700,color:"var(--t)",fontFamily:"var(--mono)"}}>Lordo</span>
-              <div style={{display:"flex",gap:14,alignItems:"center"}}>
-                <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700}} className={sgn((kpis.plOpen||0)+(kpis.plClose||0)+(kpis.cedole||0))}>
-                  {fN((kpis.plOpen||0)+(kpis.plClose||0)+(kpis.cedole||0))}
-                </span>
-                <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,minWidth:56,textAlign:"right"}} className={sgn((kpis.plOpen||0)+(kpis.plClose||0)+(kpis.cedole||0))}>
-                  {kpis.rendimento!==0&&kpis.pct!=null?fP(((kpis.plOpen||0)+(kpis.plClose||0)+(kpis.cedole||0))/kpis.rendimento*kpis.pct,1):"—"}
-                </span>
-              </div>
-            </div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
-              padding:"11px 10px",borderRadius:7,cursor:"pointer",background:"transparent",marginTop:4}}
-              onClick={()=>{setPlDetailModal(false);setPlDetailReturn(true);setShowCosts(true);}}
-              onMouseEnter={e=>e.currentTarget.style.background="var(--b)"}
-              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-              <span style={{fontSize:14,color:"var(--t)",fontFamily:"var(--mono)"}}>Tax & Fees ↗</span>
-              <div style={{display:"flex",gap:14,alignItems:"center"}}> 
-                <span style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:700,color:"var(--r)"}}>{kpis.costs?fN(kpis.costs):"—"}</span>
-                <span style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:700,minWidth:56,textAlign:"right",color:"var(--r)"}}>
-                  {kpis.rendimento!==0&&kpis.pct!=null?fP((kpis.costs/kpis.rendimento)*kpis.pct,1):"—"}
-                </span>
-              </div>
-            </div>
-            <div style={{borderTop:"2px solid var(--b)",marginTop:8,padding:"13px 10px",
-              display:"flex",justifyContent:"space-between",alignItems:"center",
-              background:"var(--s1)",borderRadius:7,border:"1px solid var(--b)"}}>
-              <span style={{fontSize:15,fontWeight:700,color:"var(--t)",fontFamily:"var(--mono)"}}>Netto</span>
-              <div style={{display:"flex",gap:14,alignItems:"center"}}>
-                <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700}} className={sgn(kpis.rendimento)}>{fN(kpis.rendimento)}</span>
-                <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,minWidth:56,textAlign:"right"}} className={sgn(kpis.pct)}>{fP(kpis.pct,1)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    )}
 
     {plOpenModal&&kpis&&(
       <div className="modal-bg" onClick={()=>{setPlOpenModal(false);if(plDetailReturn){setPlDetailReturn(false);setPlDetailModal(true);}}}>
@@ -3753,7 +3804,6 @@ function App() {
                             <div style={{gridRow:1,gridColumn:1,display:"flex",alignItems:"center",gap:8,minWidth:0}}>
                               <span style={{width:9,height:9,borderRadius:"50%",background:instColor(inst),flexShrink:0}}/>
                               <span style={{fontWeight:700,fontSize:15,color:"var(--t)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{inst}</span>
-                              <span style={{fontSize:11,color:"var(--m)",fontFamily:"var(--mono)",flexShrink:0}}>{isExp?"▼":"▶"}</span>
                             </div>
                             <div style={{gridRow:1,gridColumn:2,fontFamily:"var(--mono)",fontWeight:700,fontSize:15,fontVariantNumeric:"tabular-nums"}} className="green">{fN(tot)}</div>
                           </div>
@@ -3793,7 +3843,6 @@ function App() {
                                   onClick={handleToggle}>
                                   <div style={{gridRow:1,gridColumn:1,display:"flex",alignItems:"center",gap:8}}>
                                     <span style={{fontWeight:700,fontSize:15,color:"var(--t)"}}>{MN[mi]}</span>
-                                    <span style={{fontSize:11,color:"var(--m)",fontFamily:"var(--mono)"}}>{isExp?"▼":"▶"}</span>
                                   </div>
                                   <div style={{gridRow:1,gridColumn:2,fontFamily:"var(--mono)",fontWeight:700,fontSize:15,fontVariantNumeric:"tabular-nums"}} className="green">{fN(tot)}</div>
                                 </div>

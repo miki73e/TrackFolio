@@ -3653,9 +3653,23 @@ function App() {
           <div style={{display:"flex",flexDirection:"column",gap:4}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
               padding:"11px 10px",background:"var(--s1)",borderRadius:7}}>
-              <span style={{fontSize:14,fontWeight:700,color:"var(--t)",fontFamily:"var(--mono)"}}>Totale</span>
+              <span style={{fontSize:14,fontWeight:700,color:"var(--t)",fontFamily:"var(--mono)"}}>Tax</span>
               <span style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:700,color:"var(--r)"}}>
                 -{fN(kpis.tax||0)}
+              </span>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+              padding:"11px 10px",background:"var(--s1)",borderRadius:7}}>
+              <span style={{fontSize:14,fontWeight:700,color:"var(--t)",fontFamily:"var(--mono)"}}>Commissioni</span>
+              <span style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:700,color:"var(--r)"}}>
+                -{fN(kpis.fees||0)}
+              </span>
+            </div>
+            <div style={{borderTop:"1px solid var(--b)",marginTop:4,padding:"13px 10px",
+              display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:15,fontWeight:700,color:"var(--t)",fontFamily:"var(--mono)"}}>Totale</span>
+              <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,color:"var(--r)"}}>
+                -{fN((kpis.tax||0)+(kpis.fees||0))}
               </span>
             </div>
           </div>

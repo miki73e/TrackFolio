@@ -3422,7 +3422,7 @@ function App() {
             <button className="mx" onClick={()=>setHintDashboard(false)}>✕</button>
           </div>
           <div style={{fontSize:14,color:"var(--m)",lineHeight:1.6,padding:"8px 0 16px",fontFamily:"var(--sans)"}}>
-            Clicca nel box per vedere dettagli.
+            Tap nel box per vedere dettagli.
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"var(--t)",cursor:"pointer"}}>
@@ -3447,7 +3447,7 @@ function App() {
             <button className="mx" onClick={()=>setHintRendimento(false)}>✕</button>
           </div>
           <div style={{fontSize:14,color:"var(--m)",lineHeight:1.6,padding:"8px 0 16px",fontFamily:"var(--sans)"}}>
-            Clicca sulle voci di dettaglio — Posizioni aperte, Posizioni chiuse, Cedole/Dividendi, Costi — per visualizzare i dati di riferimento.
+            Tap sulle voci di dettaglio — Posizioni aperte, Posizioni chiuse, Cedole/Dividendi, Costi — per visualizzare i dati di riferimento.
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"var(--t)",cursor:"pointer"}}>
@@ -3472,8 +3472,8 @@ function App() {
             <button className="mx" onClick={()=>setHintCedole(false)}>✕</button>
           </div>
           <div style={{fontSize:14,color:"var(--m)",lineHeight:1.7,padding:"8px 0 16px",fontFamily:"var(--sans)"}}>
-            Clicca su uno strumento per mostrare nel grafico la vista asset.<br/>
-            Clicca su una barra del grafico per mostrare la vista period.
+            Tap su uno strumento per mostrare nel grafico la vista asset.<br/>
+            Tap su una barra del grafico per mostrare la vista period.
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"var(--t)",cursor:"pointer"}}>
@@ -3654,23 +3654,26 @@ function App() {
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
               padding:"11px 10px",background:"var(--s1)",borderRadius:7}}>
               <span style={{fontSize:14,fontWeight:700,color:"var(--t)",fontFamily:"var(--mono)"}}>Tax</span>
-              <span style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:700,color:"var(--r)"}}>
-                {kpis.tax?"-"+fN(kpis.tax):"—"}
-              </span>
+              <div style={{display:"flex",gap:14,alignItems:"center"}}>
+                <span style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:700,color:"var(--r)"}}>{kpis.tax?"-"+fN(kpis.tax):fN(0)}</span>
+                <span style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:600,minWidth:56,textAlign:"right",color:"var(--r)"}}>—</span>
+              </div>
             </div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
               padding:"11px 10px",background:"var(--s1)",borderRadius:7}}>
               <span style={{fontSize:14,fontWeight:700,color:"var(--t)",fontFamily:"var(--mono)"}}>Commissioni</span>
-              <span style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:700,color:"var(--r)"}}>
-                {kpis.fees?"-"+fN(kpis.fees):"—"}
-              </span>
+              <div style={{display:"flex",gap:14,alignItems:"center"}}>
+                <span style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:700,color:"var(--r)"}}>{kpis.fees?"-"+fN(kpis.fees):fN(0)}</span>
+                <span style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:600,minWidth:56,textAlign:"right",color:"var(--r)"}}>—</span>
+              </div>
             </div>
             <div style={{borderTop:"1px solid var(--b)",marginTop:4,padding:"13px 10px",
               display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{fontSize:15,fontWeight:700,color:"var(--t)",fontFamily:"var(--mono)"}}>Totale</span>
-              <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,color:"var(--r)"}}>
-                {((kpis.tax||0)+(kpis.fees||0))?"-"+fN((kpis.tax||0)+(kpis.fees||0)):"—"}
-              </span>
+              <div style={{display:"flex",gap:14,alignItems:"center"}}>
+                <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,color:"var(--r)"}}>{((kpis.tax||0)+(kpis.fees||0))?"-"+fN((kpis.tax||0)+(kpis.fees||0)):fN(0)}</span>
+                <span style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:600,minWidth:56,textAlign:"right",color:"var(--r)"}}>—</span>
+              </div>
             </div>
           </div>
         </div>

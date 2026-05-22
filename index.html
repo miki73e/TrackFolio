@@ -1239,9 +1239,9 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
         {/* Ordina dropdown */}
         <div style={{position:"relative",flexShrink:0}} ref={sortMenuRef}>
           <button onClick={function(){setSortOpen(function(o){return !o;});}}
-            style={{fontSize:12,fontFamily:"var(--mono)",padding:"5px 14px",borderRadius:6,
+            style={{fontSize:15,fontFamily:"var(--mono)",padding:"5px 14px",borderRadius:6,
               border:"1px solid var(--b)",background:"var(--s2)",color:"var(--t)",cursor:"pointer",
-              fontWeight:700,display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
+              fontWeight:700,display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap",lineHeight:1}}>
             ⇅
           </button>
           {sortOpen && <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,zIndex:100,
@@ -1296,17 +1296,6 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
       {/* ── ALLOCAZIONE ── */}
       {view==="ALLOC"&&<>
         <div style={{position:"sticky",top:"calc(var(--nav-h) - 1px)",background:"var(--bg)",zIndex:80,paddingTop:4,paddingBottom:8}}>
-        {/* Toolbar Comprimi/Espandi (in alto a sx, sopra donut) */}
-        <div style={{display:"flex",alignItems:"center",marginBottom:12}}>
-          <button onClick={function(){setAllocExpanded(function(x){var n=!x;localStorage.setItem("tf_alloc_expanded",n?"1":"0");return n;});setAllocHighlight(null);}}
-            title={allocExpanded?"Comprimi":"Espandi"}
-            style={{fontSize:12,fontFamily:"var(--mono)",padding:"5px 12px",borderRadius:6,
-              border:"1px solid var(--b)",background:"var(--s2)",color:"var(--t)",cursor:"pointer",
-              fontWeight:700,display:"flex",alignItems:"center",gap:5}}>
-            <CollapseIcon compressed={!allocExpanded}/>
-          </button>
-        </div>
-
         {(()=>{
           if(!allocExpanded){
             // Modalità compressa: ordina per peso decrescente
@@ -1342,6 +1331,17 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
             onSliceClick={function(label){setAllocHighlight(label);}}
             onClear={function(){setAllocHighlight(null);}}/>;
         })()}
+        </div>
+
+        {/* Toolbar Comprimi/Espandi (sotto il grafico, sopra i dati) */}
+        <div style={{display:"flex",alignItems:"center",marginTop:16}}>
+          <button onClick={function(){setAllocExpanded(function(x){var n=!x;localStorage.setItem("tf_alloc_expanded",n?"1":"0");return n;});setAllocHighlight(null);}}
+            title={allocExpanded?"Comprimi":"Espandi"}
+            style={{fontSize:12,fontFamily:"var(--mono)",padding:"5px 12px",borderRadius:6,
+              border:"1px solid var(--b)",background:"var(--s2)",color:"var(--t)",cursor:"pointer",
+              fontWeight:700,display:"flex",alignItems:"center",gap:5}}>
+            <CollapseIcon compressed={!allocExpanded}/>
+          </button>
         </div>
 
         <div style={{marginTop:16}}>

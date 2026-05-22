@@ -1239,10 +1239,16 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
         {/* Ordina dropdown */}
         <div style={{position:"relative",flexShrink:0}} ref={sortMenuRef}>
           <button onClick={function(){setSortOpen(function(o){return !o;});}}
-            style={{fontSize:15,fontFamily:"var(--mono)",padding:"5px 14px",borderRadius:6,
+            title="Ordina"
+            style={{fontSize:12,fontFamily:"var(--mono)",padding:"5px 12px",borderRadius:6,
               border:"1px solid var(--b)",background:"var(--s2)",color:"var(--t)",cursor:"pointer",
-              fontWeight:700,display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap",lineHeight:1}}>
-            ⇅
+              fontWeight:700,display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="7,4 7,20"/>
+              <polyline points="4,7 7,4 10,7"/>
+              <polyline points="17,20 17,4"/>
+              <polyline points="14,17 17,20 20,17"/>
+            </svg>
           </button>
           {sortOpen && <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,zIndex:100,
               background:"var(--s1)",border:"1px solid var(--b)",borderRadius:6,
@@ -1331,10 +1337,9 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
             onSliceClick={function(label){setAllocHighlight(label);}}
             onClear={function(){setAllocHighlight(null);}}/>;
         })()}
-        </div>
 
-        {/* Toolbar Comprimi/Espandi (sotto il grafico, sopra i dati) */}
-        <div style={{display:"flex",alignItems:"center",marginTop:16}}>
+        {/* Toolbar Comprimi/Espandi (sotto il grafico, sopra i dati — dentro lo sticky come in Cedole) */}
+        <div style={{display:"flex",alignItems:"center",marginTop:12}}>
           <button onClick={function(){setAllocExpanded(function(x){var n=!x;localStorage.setItem("tf_alloc_expanded",n?"1":"0");return n;});setAllocHighlight(null);}}
             title={allocExpanded?"Comprimi":"Espandi"}
             style={{fontSize:12,fontFamily:"var(--mono)",padding:"5px 12px",borderRadius:6,
@@ -1342,6 +1347,7 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
               fontWeight:700,display:"flex",alignItems:"center",gap:5}}>
             <CollapseIcon compressed={!allocExpanded}/>
           </button>
+        </div>
         </div>
 
         <div style={{marginTop:16}}>

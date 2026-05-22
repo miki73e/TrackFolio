@@ -479,6 +479,29 @@ const heatCol = p => {
   return t >= 0 ? `rgba(34,197,94,${0.08+t*0.4})` : `rgba(239,68,68,${0.08+Math.abs(t)*0.4})`;
 };
 
+// Icona comprimi/espandi in stile app (box + frecce diagonali).
+// compressed=true → frecce verso il centro (stato compresso, come da spec);
+// compressed=false → frecce verso gli angoli (stato espanso).
+function CollapseIcon({compressed}) {
+  return compressed ? (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="2" width="20" height="20" rx="5"/>
+      <polyline points="18,9 14,9 14,5"/>
+      <line x1="14" y1="9" x2="18" y2="5"/>
+      <polyline points="6,15 10,15 10,19"/>
+      <line x1="10" y1="15" x2="6" y2="19"/>
+    </svg>
+  ) : (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="2" width="20" height="20" rx="5"/>
+      <polyline points="14,5 18,5 18,9"/>
+      <line x1="18" y1="5" x2="14" y2="9"/>
+      <polyline points="10,19 6,19 6,15"/>
+      <line x1="6" y1="19" x2="10" y2="15"/>
+    </svg>
+  );
+}
+
 // ── Engine ────────────────────────────────────────────────────────────────────
 function wavgAt(txs, date) {
   const pos = {};
@@ -1208,10 +1231,11 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
       {/* ── TOOLBAR: comprimi + ordina + orario + toggle ── */}
       {!forceView && <div style={{display:"flex",alignItems:"center",gap:10,paddingBottom:8}}>
         <button onClick={function(){setCollapsed(function(c){var n=!c;localStorage.setItem("tf_holdings_collapsed",n?"1":"0");return n;});}}
-          style={{fontSize:12,fontFamily:"var(--mono)",padding:"5px 14px",borderRadius:6,
+          title={collapsed?"Espandi":"Comprimi"}
+          style={{fontSize:12,fontFamily:"var(--mono)",padding:"5px 12px",borderRadius:6,
             border:"1px solid var(--b)",background:"var(--s2)",color:"var(--t)",cursor:"pointer",
             fontWeight:700,display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap",flexShrink:0}}>
-          {collapsed?"▶︎ Espandi":"▼ Comprimi"}
+          <CollapseIcon compressed={collapsed}/>
         </button>
 
         {/* Ordina dropdown */}
@@ -1277,10 +1301,11 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
         {/* Toolbar Comprimi/Espandi (in alto a sx, sopra donut) */}
         <div style={{display:"flex",alignItems:"center",marginBottom:12}}>
           <button onClick={function(){setAllocExpanded(function(x){var n=!x;localStorage.setItem("tf_alloc_expanded",n?"1":"0");return n;});setAllocHighlight(null);}}
-            style={{fontSize:12,fontFamily:"var(--mono)",padding:"5px 14px",borderRadius:6,
+            title={allocExpanded?"Comprimi":"Espandi"}
+            style={{fontSize:12,fontFamily:"var(--mono)",padding:"5px 12px",borderRadius:6,
               border:"1px solid var(--b)",background:"var(--s2)",color:"var(--t)",cursor:"pointer",
               fontWeight:700,display:"flex",alignItems:"center",gap:5}}>
-            {allocExpanded?"▼ Comprimi":"▶︎ Espandi"}
+            <CollapseIcon compressed={!allocExpanded}/>
           </button>
         </div>
 
@@ -1650,7 +1675,7 @@ function AdminTab({anagrafe,setAnagrafe,adminUsers,loadAdminUsers,deleteUser,doI
             style={{fontFamily:"var(--mono)",fontSize:13,fontWeight:700,padding:"8px 14px",borderRadius:6,
               border:"1px solid var(--b)",background:"var(--s2)",color:"var(--t)",
               flex:"1 1 180px",minWidth:160,outline:"none"}}/>
-          <div style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--m)",letterSpacing:".08em"}}>v. 5.01</div>
+          <div style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--m)",letterSpacing:".08em"}}>v. 5.02</div>
         </div>
         <div style={{background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,overflow:"hidden"}}>
           <table style={{width:"100%",tableLayout:"fixed",borderCollapse:"collapse"}}>
@@ -1819,6 +1844,7 @@ function App() {
   const [hintDashboard,setHintDashboard] = useState(()=>localStorage.getItem("tf_hint_dashboard_dismissed")!=="1");
   const [hintRendimento,setHintRendimento] = useState(()=>localStorage.getItem("tf_hint_rendimento_dismissed")!=="1");
   const [hintCedole,setHintCedole] = useState(()=>localStorage.getItem("tf_hint_cedole_dismissed")!=="1");
+  const [hintHoldings,setHintHoldings] = useState(()=>localStorage.getItem("tf_hint_holdings_dismissed")!=="1");
   const [lightMode,setLightMode] = useState(()=>localStorage.getItem("tf_theme")==="light"); // {snaps:[...]} o null
   const [txDetail,setTxDetail] = useState(null); // tx detail modal
   const [showCosts,setShowCosts] = useState(false);
@@ -3560,6 +3586,32 @@ function App() {
       </div>
     )}
 
+    {/* Hint Holdings modal: spiega i due box superiori della pagina Holdings */}
+    {tab==="live"&&hintHoldings&&(
+      <div className="modal-bg" onClick={()=>setHintHoldings(false)}>
+        <div className="modal" style={{maxWidth:380}} onClick={e=>e.stopPropagation()}>
+          <div className="mhdr">
+            <div className="mtitle">💡 Suggerimento</div>
+            <button className="mx" onClick={()=>setHintHoldings(false)}>✕</button>
+          </div>
+          <div style={{fontSize:14,color:"var(--m)",lineHeight:1.6,padding:"8px 0 16px",fontFamily:"var(--sans)"}}>
+            Il box a <strong style={{color:"var(--t)"}}>destra</strong> mostra i dati in base al toggle Oggi/Aperte selezionato.<br/><br/>
+            Il box a <strong style={{color:"var(--t)"}}>sinistra</strong> è interattivo: fai tap per passare dal valore del portafoglio alla performance settimanale.
+          </div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"var(--t)",cursor:"pointer"}}>
+              <input type="checkbox" onChange={e=>{
+                if(e.target.checked) localStorage.setItem("tf_hint_holdings_dismissed","1");
+                else localStorage.removeItem("tf_hint_holdings_dismissed");
+              }}/>
+              Ho letto, non mostrare più
+            </label>
+            <button className="btn bp" style={{minWidth:80}} onClick={()=>setHintHoldings(false)}>OK</button>
+          </div>
+        </div>
+      </div>
+    )}
+
     {/* Hint Rendimento modal: appare la prima volta che l'utente apre il dettaglio rendimento */}
     {plDetailModal&&hintRendimento&&(
       <div className="modal-bg" style={{zIndex:400}} onClick={()=>setHintRendimento(false)}>
@@ -3958,10 +4010,11 @@ function App() {
                   {/* Comprimi/Espandi */}
                   <div style={{display:"flex",alignItems:"center"}}>
                     <button onClick={()=>{setCedExpanded(cedExpanded==="_all_"?null:"_all_");setActiveCedMi(null);setActiveCedInst(null);}}
-                      style={{fontSize:12,fontFamily:"var(--mono)",padding:"5px 14px",borderRadius:6,
+                      title={cedExpanded==="_all_"?"Comprimi":"Espandi"}
+                      style={{fontSize:12,fontFamily:"var(--mono)",padding:"5px 12px",borderRadius:6,
                         border:"1px solid var(--b)",background:"var(--s2)",color:"var(--t)",cursor:"pointer",
                         fontWeight:700,display:"flex",alignItems:"center",gap:5}}>
-                      {cedExpanded==="_all_"?"▼ Comprimi":"▶︎ Espandi"}
+                      <CollapseIcon compressed={cedExpanded!=="_all_"}/>
                     </button>
                   </div>
                 </div>

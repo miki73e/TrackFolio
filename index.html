@@ -262,6 +262,18 @@ async function sbLoad(table, impersonateUid) {
   }
   return r.json();
 }
+
+// weekly_cache: 1 riga per utente (PK user_id), scritta solo dalla edge cron.
+// Tabella unica anche per demo. RLS filtra sulla riga dell'utente loggato.
+async function loadWeeklyCache() {
+  try {
+    const hdr = getHdr();
+    const r = await fetchWithTimeout(`${SB_URL}/rest/v1/weekly_cache?select=*`, {headers: hdr});
+    if (!r.ok) return null;
+    const rows = await r.json();
+    return (rows && rows.length) ? rows[0] : null;
+  } catch(e) { console.warn("weekly_cache load failed", e); return null; }
+}
 async function sbInsert(table, row) {
   // Demo: sandbox in-memory, no DB write. Restituisce id fittizio per il chiamante.
   if (_isDemo && (table === "transactions_new" || table === "snapshot")) {
@@ -835,8 +847,12 @@ function Donut({slices, total, onSliceClick, colorFn, highlight, onClear}) {
 
 const EMPTY={date:today(),type:"BUY",assetClass:"",prodotto:"",instrument:"",isin:"",ticker:"",anagrafeId:null,qty:"",price:"",commission:"",tax:"",amount:"",commenti:""};
 
-function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondPrices,setManualBondPrices,pricesCacheVer,liveLoading,lastUpdated,holdingsView,setHoldingsView,snaps,setSnaps,setSyncStatus,onClickInst,onRefresh,sbUpdate,sbInsert,snapToRow,userId,isImpersonating,forceView}) {
+function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondPrices,setManualBondPrices,pricesCacheVer,liveLoading,lastUpdated,holdingsView,setHoldingsView,snaps,setSnaps,weeklyCache,setSyncStatus,onClickInst,onRefresh,sbUpdate,sbInsert,snapToRow,userId,isImpersonating,forceView}) {
   var view = forceView || holdingsView;
+  var [leftMode, setLeftMode] = React.useState(function(){ return localStorage.getItem("tf_holdings_left_box")==="weekly"?"weekly":"default"; });
+  function toggleLeftMode(){
+    setLeftMode(function(m){ var n=m==="default"?"weekly":"default"; localStorage.setItem("tf_holdings_left_box", n); return n; });
+  }
   var [manualPriceModal, setManualPriceModal] = React.useState(null); // {anagrafeId, cacheKey, asset, currentPrice}
   var [manualPriceVal, setManualPriceVal] = React.useState("");
   var [allocOverlay, setAllocOverlay] = React.useState(null); // assetClass label or null
@@ -914,6 +930,16 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
   window._tf_grand_total = grandTotal;
   var totDiffAll=grandTotal-totInvAll;
   var totDiffPctAll=totInvAll>0?(totDiffAll/totInvAll)*100:null;
+
+  // Performance settimanale: (cval-inv) oggi − (cval-inv) lunedì.
+  // weeklyCache = riga da weekly_cache (o null se non ancora popolata).
+  var weeklyDiff=null, weeklyDiffPct=null;
+  if(weeklyCache && weeklyCache.cval_week!=null && weeklyCache.inv_week!=null){
+    var plOpenNow = grandTotal - totInvAll;
+    var plOpenWeek = Number(weeklyCache.cval_week) - Number(weeklyCache.inv_week);
+    weeklyDiff = plOpenNow - plOpenWeek;
+    weeklyDiffPct = Number(weeklyCache.cval_week)>0 ? (weeklyDiff/Number(weeklyCache.cval_week))*100 : null;
+  }
 
   // Donut
   var byAC={};
@@ -1146,12 +1172,24 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
       {(view==="ALL"||view==="DAY")&&<div style={{position:"sticky",top:"calc(var(--nav-h) - 1px)",background:"var(--bg)",zIndex:80,paddingTop:4}}>
       {/* ── BOX UNIFICATO IN ALTO (Aperte + Oggi) ── */}
       <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"stretch"}}>
-        {/* Box SX: Controvalore (R1) + Investito (R2 piccolo con suffix INV) */}
-        <div style={{flex:1,background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,padding:"10px 14px"}}>
-          <div style={{fontFamily:"var(--mono)",fontSize:21,fontWeight:700,color:"var(--t)",lineHeight:1}}>{fN(grandTotal)}</div>
-          <div style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,color:"var(--t)",lineHeight:1,marginTop:4}}>
-            {fN(totInvAll)}  <span style={{fontSize:10,letterSpacing:".1em",textTransform:"uppercase"}}>Inv</span>
-          </div>
+        {/* Box SX: cycle al tap — default (Controvalore + Inv) ↔ weekly (Diff settimanale) */}
+        <div onClick={toggleLeftMode}
+          style={{flex:1,background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,padding:"10px 14px",cursor:"pointer",position:"relative"}}>
+          {leftMode==="default" ? (
+            <>
+              <div style={{fontFamily:"var(--mono)",fontSize:21,fontWeight:700,color:"var(--t)",lineHeight:1}}>{fN(grandTotal)}</div>
+              <div style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,color:"var(--t)",lineHeight:1,marginTop:4}}>
+                {fN(totInvAll)}  <span style={{fontSize:10,letterSpacing:".1em",textTransform:"uppercase"}}>Inv</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{fontFamily:"var(--mono)",fontSize:21,fontWeight:700,lineHeight:1}} className={weeklyDiff!=null?sgn(weeklyDiff):""}>{weeklyDiff!=null?fN(weeklyDiff):"—"}</div>
+              <div style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,lineHeight:1,marginTop:4}} className={weeklyDiffPct!=null?sgn(weeklyDiffPct):""}>
+                {weeklyDiffPct!=null?fP(weeklyDiffPct,2):"—"}  <span style={{fontSize:10,letterSpacing:".1em",textTransform:"uppercase",color:"var(--m)"}}>Sett</span>
+              </div>
+            </>
+          )}
         </div>
         {/* Box DX: dinamico in base a view (Aperte=diff totale, Oggi=var giorno) */}
         {view==="DAY" ? (
@@ -1728,6 +1766,7 @@ function App() {
   const [adminUsers,setAdminUsers] = useState([]);
   const [txs,setTxs]     = useState([]);
   const [snaps,setSnaps] = useState([]);
+  const [weeklyCache,setWeeklyCache] = useState(null);
   const snapsRef = React.useRef(snaps);
   useEffect(()=>{ snapsRef.current = snaps; },[snaps]);
   const [anagrafe,setAnagrafe] = useState([]);
@@ -1883,7 +1922,7 @@ function App() {
       setSyncStatus("loading");
       // Load prices cache for this user
       const effectiveUid2 = uid || session?.user?.id || _currentSession?.user?.id;
-      let tRows, sRows, aRows;
+      let tRows, sRows, aRows, weeklyRow;
       if(uid) {
         const [result, anagRes] = await Promise.all([
           adminCall("get-data", {user_id: uid}),
@@ -1891,12 +1930,14 @@ function App() {
         ]);
         tRows = result.transactions;
         sRows = result.snapshots;
+        weeklyRow = result.weekly || null;
         aRows = anagRes;
       } else {
-        [tRows, sRows, aRows] = await Promise.all([
+        [tRows, sRows, aRows, weeklyRow] = await Promise.all([
           sbLoad("transactions_new", null),
           sbLoad("snapshot", null),
           sbLoad("anagrafe"),
+          loadWeeklyCache(),
         ]);
       }
       const anagList = aRows.map(rowToAnagrafe);
@@ -1906,6 +1947,7 @@ function App() {
       setAnagrafe(anagList);
       setTxs(tRows.map(r=>rowToTx(r,anagMap)));
       setSnaps(sRows.map(rowToSnap));
+      setWeeklyCache(weeklyRow);
       setReady(true);
       setLoading(false);
       setSyncStatus("");
@@ -3275,6 +3317,7 @@ function App() {
       lastUpdated={lastUpdated}
       snaps={snaps}
       setSnaps={setSnaps}
+      weeklyCache={weeklyCache}
       setSyncStatus={setSyncStatus}
       liveDonut={liveDonut}
       holdingsView={holdingsView}

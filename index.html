@@ -597,7 +597,16 @@ function yearMetrics(txs, snaps, year) {
     .reduce((s,t) => s+(t.tax||0), 0);
   const fees=txs.filter(t=>t.date>=jan1&&t.date<=dec31).reduce((s,t)=>s+(t.commission||0),0);
   const rendimento = (plOpen||0) + plClose + cedole - tax - fees;
-  const mp = mediaPesata(txs, jan1, dec31);
+  // Media pesata investita coerente con la vista ALL:
+  // from = max(inizio investimento reale, 1/1 dell'anno); to = min(oggi, 31/12).
+  // inizio reale = data initial snapshot se esiste, altrimenti data prima tx in assoluto.
+  const initialSnap = snaps.find(s => s.is_initial);
+  const allDates = txs.map(t => t.date).filter(Boolean).sort();
+  const realStart = initialSnap?.date || allDates[0] || jan1;
+  const mpFrom = realStart > jan1 ? realStart : jan1;
+  const todayStr = today();
+  const mpTo = dec31 < todayStr ? dec31 : todayStr;
+  const mp = mediaPesata(txs, mpFrom, mpTo);
   const pct = mp > 0 ? (rendimento/mp)*100 : null;
   return {plOpen, plClose, cedole, tax, fees, costs:tax+fees, rendimento, pct, mediaInv:mp, lastSnap};
 }
@@ -1207,7 +1216,7 @@ function LiveView({livePositions,bondPositions,livePrices,bondPrices,manualBondP
             <>
               <div style={{fontFamily:"var(--mono)",fontSize:21,fontWeight:700,lineHeight:1}} className={weeklyDiff!=null?sgn(weeklyDiff):""}>{weeklyDiff!=null?fN(weeklyDiff):"—"}</div>
               <div style={{fontFamily:"var(--mono)",fontSize:15,fontWeight:700,lineHeight:1,marginTop:4}} className={weeklyDiffPct!=null?sgn(weeklyDiffPct):""}>
-                {weeklyDiffPct!=null?fP(weeklyDiffPct,2):"—"}  <span style={{fontSize:10,letterSpacing:".1em",textTransform:"uppercase",color:"var(--m)"}}>Sett</span>
+                {weeklyDiffPct!=null?fP(weeklyDiffPct,2):"—"}  <span style={{fontSize:10,letterSpacing:".1em",textTransform:"uppercase",color:"var(--m)"}}>WTD</span>
               </div>
             </>
           )}
@@ -1679,7 +1688,7 @@ function AdminTab({anagrafe,setAnagrafe,adminUsers,loadAdminUsers,deleteUser,doI
             style={{fontFamily:"var(--mono)",fontSize:13,fontWeight:700,padding:"8px 14px",borderRadius:6,
               border:"1px solid var(--b)",background:"var(--s2)",color:"var(--t)",
               flex:"1 1 180px",minWidth:160,outline:"none"}}/>
-          <div style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--m)",letterSpacing:".08em"}}>v. 5.04</div>
+          <div style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--m)",letterSpacing:".08em"}}>v. 5.06</div>
         </div>
         <div style={{background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,overflow:"hidden"}}>
           <table style={{width:"100%",tableLayout:"fixed",borderCollapse:"collapse"}}>
@@ -2002,11 +2011,6 @@ function App() {
       if(pr.ok) { const pd = await pr.json(); if(pd[0]) setUserProfile({role:pd[0].role}); }
     } catch(e) {}
     setLoading(true); // evita render intermedio con txs=[] dopo SIGNED_IN
-    // Reset dati demo ad ogni login demo
-    if(authEmail.trim().toLowerCase() === "trackfolio@yahoo.com") {
-      const demoUid2 = _currentSession?.user?.id || s?.user?.id;
-      if(demoUid2) try { await adminCall("reset-demo", {demoUid: demoUid2}); } catch(e) { console.warn("reset-demo", e); }
-    }
     await loadData(null);
     setAuthLoading(false);
   }
@@ -2128,13 +2132,15 @@ function App() {
     const plOpen=allYearData.reduce((s,y)=>s+(y.plOpen||0),0);
     const fees=txs.reduce((s,t)=>s+(t.commission||0),0);
     const firstSnap=snaps.find(s=>s.is_initial);
-    const fromDate=firstSnap?.date||allYearData[0]?.jan1||`${new Date().getFullYear()}-01-01`;
+    // from coerente con yearMetrics: initial snapshot, altrimenti prima tx in assoluto.
+    const allTxDates=txs.map(t=>t.date).filter(Boolean).sort();
+    const fromDate=firstSnap?.date||allTxDates[0]||`${new Date().getFullYear()}-01-01`;
     const toDate=new Date().toISOString().slice(0,10);
     const mp=mediaPesata(txs,fromDate,toDate);
     const pct=mp>0?(rendimento/mp)*100:null;
     // P/L Open start e end per il modal
     return{rendimento,cedole,tax,fees,costs:tax+fees,plClose,plOpen,pct,mediaInv:mp};
-  },[allYearData,txs]);
+  },[allYearData,txs,snaps]);
 
   const plOpenDetail = useMemo(()=>{
     const snapEndVal = snapAt(snaps, periodRange.to);
@@ -2340,6 +2346,7 @@ function App() {
   const validate=()=>{
     const e={};
     if(!form.date) e.date="Obbligatorio";
+    else if(form.date > today()) e.date="La data non può essere futura";
     if(!form.instrument.trim()) e.instrument="Obbligatorio";
     else if(!form.anagrafeId) e.instrument="Titolo non censito in anagrafe — contatta l'admin";
     if(!form.assetClass) e.assetClass="Obbligatorio";
@@ -2349,6 +2356,23 @@ function App() {
     if(!isI&&!form.price) e.price="Obbligatorio";
     return e;
   };
+  // Invalida (cancella) la riga weekly_cache dell'utente quando una tx altera
+  // posizioni/storico in modo che lo snapshot di lunedì non sia più coerente.
+  // Eccezione gestita dai chiamanti: nuova tx con data odierna NON invalida.
+  async function invalidateWeeklyCache(uid) {
+    try {
+      if(impUid) {
+        await adminCall("delete-weekly", {user_id: uid});
+      } else {
+        const hdr = getHdr();
+        await fetchWithTimeout(`${SB_URL}/rest/v1/weekly_cache?user_id=eq.${uid}`, {
+          method:"DELETE", headers:hdr
+        });
+      }
+      setWeeklyCache(null);
+    } catch(e) { console.warn("invalidateWeeklyCache", e); }
+  }
+
   const saveTx=async()=>{
     const e=validate(); if(Object.keys(e).length){setFerr(e);return;}
     const qty=isI?0:+form.qty, price=isI?(+form.amount||0):+form.price;
@@ -2382,6 +2406,8 @@ function App() {
         setTxs(newTxs);
         if(isBuySell) await updateInitialAndCascade(newTxs, rec.date, effectiveUid);
         await fetchLivePrices(livePositions, bondPositions); await new Promise(r=>setTimeout(r,500)); await snapCurrentMonth();
+        // #4: nuova tx invalida weekly_cache, ECCETTO se la data è odierna (non altera il passato).
+        if(rec.date !== today()) await invalidateWeeklyCache(effectiveUid);
       } else {
         // UPDATE
         const row = txToRow(rec);
@@ -2390,6 +2416,8 @@ function App() {
         setTxs(newTxs);
         if(isBuySell) await updateInitialAndCascade(newTxs, rec.date, effectiveUid);
         await fetchLivePrices(livePositions, bondPositions); await new Promise(r=>setTimeout(r,500)); await snapCurrentMonth();
+        // #4: la modifica di una tx invalida sempre weekly_cache.
+        await invalidateWeeklyCache(effectiveUid);
       }
       setSyncStatus("saved"); setTimeout(()=>setSyncStatus(""),2000);
     } catch(e) {
@@ -2809,7 +2837,6 @@ function App() {
               const {data:{session:s}} = await _sb.auth.getSession();
               _currentSession = s;
               setSession(s);
-              try { await adminCall("reset-demo", {demoUid: s.user.id}); } catch(e) { console.warn("reset-demo", e.message); }
               await loadData(null);
               setAuthLoading(false);
             }}
@@ -3463,6 +3490,8 @@ function App() {
           const effectiveUid2 = impUid||session?.user?.id;
           if(isBuySell) await updateInitialAndCascade(newTxs, txDetail.date, effectiveUid2);
           await fetchLivePrices(livePositions, bondPositions); await new Promise(r=>setTimeout(r,500)); await snapCurrentMonth();
+          // #4: l'eliminazione di una tx invalida sempre weekly_cache.
+          await invalidateWeeklyCache(effectiveUid2);
           setSyncStatus("saved");setTimeout(()=>setSyncStatus(""),2000);setTxDetail(null);}
         catch(e){setSyncStatus("error");}
       }})}
@@ -4104,7 +4133,7 @@ function App() {
           </div>
           <div className="fg2">
             <div className="fg"><label>Data</label>
-              <input type="date" className={ferr.date?"err":""} value={form.date} onChange={sf("date")}/>
+              <input type="date" max={today()} className={ferr.date?"err":""} value={form.date} onChange={sf("date")}/>
               {ferr.date&&<span className="em">{ferr.date}</span>}
             </div>
             <div className="fg"><label>Tipo</label>

@@ -1845,7 +1845,6 @@ function App() {
   const [newPwdErr,setNewPwdErr] = useState("");
   const [newPwdLoading,setNewPwdLoading] = useState(false);
   const [showUserMenu,setShowUserMenu] = useState(false);
-  const [hintDashboard,setHintDashboard] = useState(()=>localStorage.getItem("tf_hint_dashboard_dismissed")!=="1");
   const [hintRendimento,setHintRendimento] = useState(()=>localStorage.getItem("tf_hint_rendimento_dismissed")!=="1");
   const [hintCedole,setHintCedole] = useState(()=>localStorage.getItem("tf_hint_cedole_dismissed")!=="1");
   const [hintHoldings,setHintHoldings] = useState(()=>localStorage.getItem("tf_hint_holdings_dismissed")!=="1");
@@ -3555,7 +3554,8 @@ function App() {
           </div>
           <div style={{fontSize:14,color:"var(--m)",lineHeight:1.7,padding:"8px 0 16px",fontFamily:"var(--sans)"}}>
             Il controvalore è stato aggiornato con i prezzi rilevati.<br/><br/>
-            Puoi sempre modificare il valore in storico, oppure verificare che siano stati catturati tutti i prezzi nel menù Holdings — anche in questo caso puoi intervenire manualmente per eventuali prezzi non trovati.
+            Puoi sempre modificare il valore in storico, oppure verificare che siano stati catturati tutti i prezzi nel menù Holdings — anche in questo caso puoi intervenire manualmente per eventuali prezzi non trovati.<br/><br/>
+            💡 Tap sul box rendimento per visualizzare i dettagli.
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"var(--t)",cursor:"pointer"}}>
@@ -3566,31 +3566,6 @@ function App() {
               Non mostrare più
             </label>
             <button className="btn bp" style={{minWidth:80}} onClick={()=>setAutoSnapNotice(false)}>OK</button>
-          </div>
-        </div>
-      </div>
-    )}
-
-    {/* Hint Dashboard: appare la prima volta che l'utente è sulla dashboard */}
-    {tab==="dashboard"&&hintDashboard&&(
-      <div className="modal-bg" onClick={()=>setHintDashboard(false)}>
-        <div className="modal" style={{maxWidth:360}} onClick={e=>e.stopPropagation()}>
-          <div className="mhdr">
-            <div className="mtitle">💡 Suggerimento</div>
-            <button className="mx" onClick={()=>setHintDashboard(false)}>✕</button>
-          </div>
-          <div style={{fontSize:14,color:"var(--m)",lineHeight:1.6,padding:"8px 0 16px",fontFamily:"var(--sans)"}}>
-            Tap sul box rendimento per visualizzare i dettagli
-          </div>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"var(--t)",cursor:"pointer"}}>
-              <input type="checkbox" onChange={e=>{
-                if(e.target.checked) localStorage.setItem("tf_hint_dashboard_dismissed","1");
-                else localStorage.removeItem("tf_hint_dashboard_dismissed");
-              }}/>
-              Ho letto, non mostrare più
-            </label>
-            <button className="btn bp" style={{minWidth:80}} onClick={()=>setHintDashboard(false)}>OK</button>
           </div>
         </div>
       </div>

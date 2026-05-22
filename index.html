@@ -1679,7 +1679,7 @@ function AdminTab({anagrafe,setAnagrafe,adminUsers,loadAdminUsers,deleteUser,doI
             style={{fontFamily:"var(--mono)",fontSize:13,fontWeight:700,padding:"8px 14px",borderRadius:6,
               border:"1px solid var(--b)",background:"var(--s2)",color:"var(--t)",
               flex:"1 1 180px",minWidth:160,outline:"none"}}/>
-          <div style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--m)",letterSpacing:".08em"}}>v. 5.02</div>
+          <div style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--m)",letterSpacing:".08em"}}>v. 5.03</div>
         </div>
         <div style={{background:"var(--s1)",border:"1px solid var(--b)",borderRadius:10,overflow:"hidden"}}>
           <table style={{width:"100%",tableLayout:"fixed",borderCollapse:"collapse"}}>
@@ -2061,6 +2061,8 @@ function App() {
     try {
       setImpUid(uid); setImpEmail(email);
       setLivePrices({}); setBondPrices({});
+      // Azzera il dataset PRIMA del load asincrono: evita auto-snap con dati misti.
+      setReady(false); setTxs([]); setSnaps([]);
       await loadData(uid);
       setTab("dashboard");
     } catch(e) {
@@ -2073,6 +2075,9 @@ function App() {
     impUidRef.current = null;
     setImpUid(null); setImpEmail(null);
     setLivePrices({}); setBondPrices({});
+    // Azzera il dataset PRIMA del load asincrono: evita che l'auto-snap effect
+    // scatti con dati dell'utente impersonato ma uid dell'admin (cross-write).
+    setReady(false); setTxs([]); setSnaps([]);
     await loadData(null);
     setTab("dashboard");
   }
@@ -3135,7 +3140,7 @@ function App() {
 
       <div className="panel">
         <div className="pt">
-          <span>{chartMode==="heatmap"?(`% ${period==="ALL"?"Annuo":"Mensile"}`):(`${period==="ALL"?"per Anno":"Mensile"}`)}</span>
+          <span>{chartMode==="heatmap"?(`% ${period==="ALL"?"per anno":"Mensile"}`):(`${period==="ALL"?"per Anno":"Mensile"}`)}</span>
           <div style={{display:"flex",border:"1px solid var(--b)",borderRadius:5,overflow:"hidden"}}>
             <button onClick={()=>{setChartMode("heatmap");localStorage.setItem("tf_chart_mode","heatmap");}}
               style={{padding:"5px 12px",fontSize:11,fontWeight:700,fontFamily:"var(--mono)",border:"none",letterSpacing:".05em",
@@ -3549,7 +3554,8 @@ function App() {
             <button className="mx" onClick={()=>setAutoSnapNotice(false)}>✕</button>
           </div>
           <div style={{fontSize:14,color:"var(--m)",lineHeight:1.7,padding:"8px 0 16px",fontFamily:"var(--sans)"}}>
-            Il controvalore è stato aggiornato con i prezzi rilevati. Puoi sempre modificare il valore in storico, oppure verificare che siano stati catturati tutti i prezzi nel menù Holdings — anche in questo caso puoi intervenire manualmente per eventuali prezzi non trovati.
+            Il controvalore è stato aggiornato con i prezzi rilevati.<br/><br/>
+            Puoi sempre modificare il valore in storico, oppure verificare che siano stati catturati tutti i prezzi nel menù Holdings — anche in questo caso puoi intervenire manualmente per eventuali prezzi non trovati.
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"var(--t)",cursor:"pointer"}}>
@@ -3574,7 +3580,7 @@ function App() {
             <button className="mx" onClick={()=>setHintDashboard(false)}>✕</button>
           </div>
           <div style={{fontSize:14,color:"var(--m)",lineHeight:1.6,padding:"8px 0 16px",fontFamily:"var(--sans)"}}>
-            Tap nel box per vedere dettagli.
+            Tap sul box rendimento per visualizzare i dettagli
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"var(--t)",cursor:"pointer"}}>
